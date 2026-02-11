@@ -1,0 +1,28 @@
+# --- Core Backend ---
+django
+djangorestframework
+django-cors-headers
+psycopg2-binary
+python-dotenv
+
+# --- AI & Computer Vision ---
+opencv-python
+huggingface_hub
+openai
+azure-ai-contentsafety
+
+# --- Real-time & WebSockets ---
+channels[daphne]
+channels-redis
+
+# --- Media & Streaming ---
+cloudinary
+yt-dlp
+
+# --- Reporting & Analytics ---
+reportlab
+requests
+
+# --- Deployment & Utilities ---
+whitenoise
+gunicorn
