@@ -4,5 +4,6 @@
 
 11 feb 2026 -> setup of the project structure and django rest framwork.
 
+12 feb 2026 -> completed models.py of each app.
 
-
+13 feb 2026 -> serialized the input and output at backend.

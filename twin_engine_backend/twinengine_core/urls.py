@@ -15,8 +15,45 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+
+
+@api_view(['GET'])
+def api_root(request):
+    """API root endpoint with available endpoints."""
+    return Response({
+        'message': 'Welcome to TwinEngine API',
+        'version': '1.0.0',
+        'endpoints': {
+            'manufacturers': '/api/manufacturers/',
+            'users': '/api/users/',
+            'machine-types': '/api/machine-types/',
+            'nodes': '/api/nodes/',
+            'edges': '/api/edges/',
+            'sensor-data': '/api/sensor-data/',
+            'alerts': '/api/alerts/',
+            'anomaly-trigger': '/api/anomaly/trigger/',
+            'vision-logs': '/api/vision-logs/',
+            'detection-zones': '/api/detection-zones/',
+            'shift-logs': '/api/shift-logs/',
+            'reports': '/api/reports/',
+            'daily-report': '/api/reports/daily/',
+        }
+    })
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    # API Root
+    path('api/', api_root, name='api-root'),
+    
+    # App URLs
+    path('api/', include('apps.manufacturers.urls')),
+    path('api/', include('apps.factory_graph.urls')),
+    path('api/', include('apps.sensors.urls')),
+    path('api/', include('apps.vision_engine.urls')),
+    path('api/', include('apps.analytics.urls')),
 ]
