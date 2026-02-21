@@ -7,3 +7,8 @@
 12 feb 2026 -> completed models.py of each app.
 
 13 feb 2026 -> serialized the input and output at backend.
+
+14 feb 2026 -> Discussed with mentor(Mr. Shivanshu Sir) about ML models.
+
+
+21 feb 2026 -> Creating Web Sockets to project. (Completed Task - 1)

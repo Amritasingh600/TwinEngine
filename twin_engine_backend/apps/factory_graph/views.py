@@ -61,7 +61,7 @@ class MachineNodeViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
-        """Update the status of a machine node."""
+        """Update the status of a machine node and broadcast via WebSocket."""
         node = self.get_object()
         new_status = request.data.get('status')
         
@@ -71,13 +71,25 @@ class MachineNodeViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        previous_status = node.status
         node.status = new_status
         node.save()
+        
+        # Broadcast status change via WebSocket
+        from apps.factory_graph.utils.broadcast import broadcast_node_status_change
+        broadcast_node_status_change(
+            manufacturer_id=node.manufacturer_id,
+            node_id=node.id,
+            node_name=node.name,
+            new_status=new_status,
+            previous_status=previous_status
+        )
         
         return Response({
             'id': node.id,
             'name': node.name,
             'status': node.status,
+            'previous_status': previous_status,
             'updated': True
         })
     

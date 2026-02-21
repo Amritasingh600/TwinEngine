@@ -93,13 +93,37 @@ class AnomalyAlertViewSet(viewsets.ModelViewSet):
             return AnomalyAlertCreateSerializer
         return AnomalyAlertSerializer
     
+    def perform_create(self, serializer):
+        """Create alert and broadcast via WebSocket."""
+        alert = serializer.save()
+        
+        # Get manufacturer_id from the related sensor_data -> machine_node
+        manufacturer_id = alert.sensor_data.machine_node.manufacturer_id
+        
+        # Broadcast new alert via WebSocket
+        from apps.factory_graph.utils.broadcast import broadcast_new_alert
+        alert_data = AnomalyAlertSerializer(alert).data
+        broadcast_new_alert(alert_data, manufacturer_id=manufacturer_id)
+    
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
-        """Mark an alert as resolved."""
+        """Mark an alert as resolved and broadcast via WebSocket."""
         alert = self.get_object()
         serializer = AnomalyResolveSerializer(alert, data=request.data)
         if serializer.is_valid():
+            # Get manufacturer_id before updating
+            manufacturer_id = alert.sensor_data.machine_node.manufacturer_id
+            
             alert = serializer.update(alert, serializer.validated_data)
+            
+            # Broadcast alert resolution via WebSocket
+            from apps.factory_graph.utils.broadcast import broadcast_alert_resolved
+            broadcast_alert_resolved(
+                alert_id=alert.id,
+                resolved_by=request.user.username if request.user.is_authenticated else None,
+                manufacturer_id=manufacturer_id
+            )
+            
             return Response(AnomalyAlertSerializer(alert).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
@@ -150,6 +174,16 @@ class AnomalyTriggerView(APIView):
             old_status = node.status
             node.status = new_status
             node.save()
+            
+            # Broadcast status change via WebSocket
+            from apps.factory_graph.utils.broadcast import broadcast_node_status_change
+            broadcast_node_status_change(
+                manufacturer_id=node.manufacturer_id,
+                node_id=node_id,
+                node_name=node.name,
+                new_status=new_status,
+                previous_status=old_status
+            )
             
             return Response({
                 'updated': True,
