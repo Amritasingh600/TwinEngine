@@ -24,20 +24,21 @@ from rest_framework.decorators import api_view
 def api_root(request):
     """API root endpoint with available endpoints."""
     return Response({
-        'message': 'Welcome to TwinEngine API',
-        'version': '1.0.0',
+        'message': 'Welcome to TwinEngine Hospitality API',
+        'version': '2.0.0',
         'endpoints': {
-            'manufacturers': '/api/manufacturers/',
-            'users': '/api/users/',
-            'machine-types': '/api/machine-types/',
+            'brands': '/api/brands/',
+            'outlets': '/api/outlets/',
+            'staff': '/api/staff/',
             'nodes': '/api/nodes/',
-            'edges': '/api/edges/',
-            'sensor-data': '/api/sensor-data/',
-            'alerts': '/api/alerts/',
-            'anomaly-trigger': '/api/anomaly/trigger/',
-            'vision-logs': '/api/vision-logs/',
-            'detection-zones': '/api/detection-zones/',
-            'shift-logs': '/api/shift-logs/',
+            'flows': '/api/flows/',
+            'orders': '/api/orders/',
+            'payments': '/api/payments/',
+            'table-trigger': '/api/table/trigger/',
+            'sales-data': '/api/sales-data/',
+            'inventory': '/api/inventory/',
+            'schedules': '/api/schedules/',
+            'summaries': '/api/summaries/',
             'reports': '/api/reports/',
             'daily-report': '/api/reports/daily/',
         }
@@ -51,9 +52,9 @@ urlpatterns = [
     path('api/', api_root, name='api-root'),
     
     # App URLs
-    path('api/', include('apps.manufacturers.urls')),
-    path('api/', include('apps.factory_graph.urls')),
-    path('api/', include('apps.sensors.urls')),
-    path('api/', include('apps.vision_engine.urls')),
-    path('api/', include('apps.analytics.urls')),
+    path('api/', include('apps.hospitality_group.urls')),
+    path('api/', include('apps.layout_twin.urls')),
+    path('api/', include('apps.order_engine.urls')),
+    path('api/', include('apps.predictive_core.urls')),
+    path('api/', include('apps.insights_hub.urls')),
 ]

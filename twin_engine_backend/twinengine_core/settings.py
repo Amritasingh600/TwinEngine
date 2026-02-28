@@ -50,11 +50,11 @@ INSTALLED_APPS = [
     'django_filters',
     
     # Local apps
-    'apps.manufacturers',
-    'apps.analytics',
-    'apps.vision_engine',
-    'apps.factory_graph',
-    'apps.sensors',
+    'apps.hospitality_group',
+    'apps.layout_twin',
+    'apps.order_engine',
+    'apps.predictive_core',
+    'apps.insights_hub',
 ]
 
 MIDDLEWARE = [
