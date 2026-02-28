@@ -4,327 +4,78 @@ This document outlines all remaining backend tasks with detailed implementation 
 
 ---
 
-## Table of Contents
+## Completed Tasks ✅
 
-1. [WebSocket Consumers (Real-time Alerts)](#1-websocket-consumers-real-time-alerts)
-2. [Authentication System](#2-authentication-system)
-3. [Hugging Face Vision Integration](#3-hugging-face-vision-integration)
-4. [Azure GPT-4o Report Generation](#4-azure-gpt-4o-report-generation)
-5. [Cloudinary Media Integration](#5-cloudinary-media-integration)
-6. [Unit Tests](#6-unit-tests)
-7. [PostgreSQL/Neon Migration](#7-postgresqlneon-migration)
-8. [Background Tasks with Celery](#8-background-tasks-with-celery)
+### 1. WebSocket Consumers (Real-time Alerts) - COMPLETED
+
+**Completed On:** February 21, 2026  
+**Time Taken:** ~4 hours
+
+#### What Was Implemented:
+- `FactoryFloorConsumer` for real-time factory floor updates
+- `AlertConsumer` for anomaly alert notifications
+- WebSocket routing for both consumers
+- ASGI configuration with ProtocolTypeRouter
+- Broadcast utility functions for pushing updates
+- View integration for automatic broadcasts on status changes
+
+#### Files Created:
+| File | Purpose |
+|------|---------|
+| `apps/factory_graph/consumers/__init__.py` | Consumer package |
+| `apps/factory_graph/consumers/factory_consumer.py` | Factory floor WebSocket consumer |
+| `apps/factory_graph/routing.py` | WebSocket URL routing |
+| `apps/factory_graph/utils/__init__.py` | Utils package |
+| `apps/factory_graph/utils/broadcast.py` | Broadcast utility functions |
+| `apps/sensors/consumers/__init__.py` | Consumer package |
+| `apps/sensors/consumers/alert_consumer.py` | Alert WebSocket consumer |
+| `apps/sensors/routing.py` | Alert WebSocket URL routing |
+
+#### Files Updated:
+| File | Changes |
+|------|---------|
+| `twinengine_core/asgi.py` | Added ProtocolTypeRouter with WebSocket support |
+| `apps/factory_graph/views.py` | Added broadcast on `update_status` action |
+| `apps/sensors/views.py` | Added broadcast on alert create/resolve |
+
+#### WebSocket Endpoints:
+| Endpoint | Purpose |
+|----------|---------|
+| `ws://host/ws/factory/<manufacturer_id>/` | Factory floor real-time updates |
+| `ws://host/ws/alerts/` | Global alerts stream |
+| `ws://host/ws/alerts/<manufacturer_id>/` | Manufacturer-specific alerts |
+
+#### How to Test:
+```bash
+# Start server with Daphne (ASGI)
+cd twin_engine_backend
+source venv/bin/activate
+daphne -b 0.0.0.0 -p 8000 twinengine_core.asgi:application
+
+# Test WebSocket connection (Python)
+python -c "
+import asyncio, websockets, json
+async def test():
+    async with websockets.connect('ws://localhost:8000/ws/factory/1/') as ws:
+        data = json.loads(await ws.recv())
+        print(f'Connected! Nodes: {len(data[\"nodes\"])}')
+asyncio.run(test())
+"
+```
 
 ---
 
-## 1. WebSocket Consumers (Real-time Alerts)
+## Remaining Tasks
 
-**Priority:** High  
-**Estimated Time:** 4-6 hours  
-**Dependencies:** `channels`, `channels-redis` (already in requirements.txt)
+## Table of Contents
 
-### Purpose
-Enable real-time communication between backend and frontend for:
-- Instant node status changes (Normal → Error)
-- Live sensor data streaming
-- Alert notifications
-
-### Implementation Steps
-
-#### Step 1: Create Consumers Directory
-```bash
-mkdir -p apps/factory_graph/consumers
-touch apps/factory_graph/consumers/__init__.py
-```
-
-#### Step 2: Create WebSocket Consumer
-Create `apps/factory_graph/consumers/factory_consumer.py`:
-
-```python
-import json
-from channels.generic.websocket import AsyncWebsocketConsumer
-from channels.db import database_sync_to_async
-from asgiref.sync import sync_to_async
-
-
-class FactoryFloorConsumer(AsyncWebsocketConsumer):
-    """
-    WebSocket consumer for real-time factory floor updates.
-    Handles node status changes and alert broadcasts.
-    """
-    
-    async def connect(self):
-        self.manufacturer_id = self.scope['url_route']['kwargs'].get('manufacturer_id', 'default')
-        self.room_group_name = f'factory_{self.manufacturer_id}'
-        
-        # Join room group
-        await self.channel_layer.group_add(
-            self.room_group_name,
-            self.channel_name
-        )
-        await self.accept()
-        
-        # Send initial state
-        await self.send_initial_state()
-    
-    async def disconnect(self, close_code):
-        # Leave room group
-        await self.channel_layer.group_discard(
-            self.room_group_name,
-            self.channel_name
-        )
-    
-    async def receive(self, text_data):
-        """Handle incoming WebSocket messages."""
-        data = json.loads(text_data)
-        message_type = data.get('type')
-        
-        if message_type == 'request_status':
-            await self.send_initial_state()
-        elif message_type == 'update_node_status':
-            await self.handle_node_update(data)
-    
-    async def send_initial_state(self):
-        """Send current state of all nodes."""
-        nodes = await self.get_all_nodes()
-        await self.send(text_data=json.dumps({
-            'type': 'initial_state',
-            'nodes': nodes
-        }))
-    
-    @database_sync_to_async
-    def get_all_nodes(self):
-        from apps.factory_graph.models import MachineNode
-        from apps.factory_graph.serializers import MachineNodeListSerializer
-        
-        nodes = MachineNode.objects.filter(manufacturer_id=self.manufacturer_id)
-        return MachineNodeListSerializer(nodes, many=True).data
-    
-    async def handle_node_update(self, data):
-        """Process node status update and broadcast to group."""
-        node_id = data.get('node_id')
-        new_status = data.get('status')
-        
-        # Update in database
-        updated = await self.update_node_status(node_id, new_status)
-        
-        if updated:
-            # Broadcast to all clients in the group
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    'type': 'node_status_change',
-                    'node_id': node_id,
-                    'status': new_status,
-                    'timestamp': str(updated)
-                }
-            )
-    
-    @database_sync_to_async
-    def update_node_status(self, node_id, status):
-        from apps.factory_graph.models import MachineNode
-        from django.utils import timezone
-        
-        try:
-            node = MachineNode.objects.get(id=node_id)
-            node.status = status
-            node.save()
-            return timezone.now()
-        except MachineNode.DoesNotExist:
-            return None
-    
-    # Event handlers for group messages
-    async def node_status_change(self, event):
-        """Send node status change to WebSocket."""
-        await self.send(text_data=json.dumps({
-            'type': 'node_status_change',
-            'node_id': event['node_id'],
-            'status': event['status'],
-            'timestamp': event['timestamp']
-        }))
-    
-    async def alert_broadcast(self, event):
-        """Send alert notification to WebSocket."""
-        await self.send(text_data=json.dumps({
-            'type': 'alert',
-            'alert_id': event['alert_id'],
-            'node_id': event['node_id'],
-            'severity': event['severity'],
-            'message': event['message']
-        }))
-    
-    async def sensor_update(self, event):
-        """Send sensor data update to WebSocket."""
-        await self.send(text_data=json.dumps({
-            'type': 'sensor_update',
-            'node_id': event['node_id'],
-            'data': event['data']
-        }))
-```
-
-#### Step 3: Create Alert Consumer
-Create `apps/sensors/consumers/alert_consumer.py`:
-
-```python
-import json
-from channels.generic.websocket import AsyncWebsocketConsumer
-
-
-class AlertConsumer(AsyncWebsocketConsumer):
-    """WebSocket consumer for real-time alert notifications."""
-    
-    async def connect(self):
-        self.alert_group = 'alerts_all'
-        
-        await self.channel_layer.group_add(
-            self.alert_group,
-            self.channel_name
-        )
-        await self.accept()
-    
-    async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(
-            self.alert_group,
-            self.channel_name
-        )
-    
-    async def new_alert(self, event):
-        """Broadcast new alert to all connected clients."""
-        await self.send(text_data=json.dumps({
-            'type': 'new_alert',
-            'alert': event['alert']
-        }))
-    
-    async def alert_resolved(self, event):
-        """Broadcast alert resolution."""
-        await self.send(text_data=json.dumps({
-            'type': 'alert_resolved',
-            'alert_id': event['alert_id']
-        }))
-```
-
-#### Step 4: Create WebSocket Routing
-Create `apps/factory_graph/routing.py`:
-
-```python
-from django.urls import re_path
-from .consumers.factory_consumer import FactoryFloorConsumer
-
-websocket_urlpatterns = [
-    re_path(r'ws/factory/(?P<manufacturer_id>\d+)/$', FactoryFloorConsumer.as_asgi()),
-]
-```
-
-Create `apps/sensors/routing.py`:
-
-```python
-from django.urls import re_path
-from .consumers.alert_consumer import AlertConsumer
-
-websocket_urlpatterns = [
-    re_path(r'ws/alerts/$', AlertConsumer.as_asgi()),
-]
-```
-
-#### Step 5: Update ASGI Configuration
-Update `twinengine_core/asgi.py`:
-
-```python
-import os
-from django.core.asgi import get_asgi_application
-from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.auth import AuthMiddlewareStack
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'twinengine_core.settings')
-
-django_asgi_app = get_asgi_application()
-
-from apps.factory_graph.routing import websocket_urlpatterns as factory_ws
-from apps.sensors.routing import websocket_urlpatterns as sensor_ws
-
-application = ProtocolTypeRouter({
-    'http': django_asgi_app,
-    'websocket': AuthMiddlewareStack(
-        URLRouter(
-            factory_ws + sensor_ws
-        )
-    ),
-})
-```
-
-#### Step 6: Add Broadcast Utility
-Create `apps/factory_graph/utils/broadcast.py`:
-
-```python
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
-
-
-def broadcast_node_status_change(manufacturer_id, node_id, status):
-    """Broadcast node status change to all connected clients."""
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f'factory_{manufacturer_id}',
-        {
-            'type': 'node_status_change',
-            'node_id': node_id,
-            'status': status,
-            'timestamp': str(timezone.now())
-        }
-    )
-
-
-def broadcast_new_alert(alert_data):
-    """Broadcast new alert to all clients."""
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        'alerts_all',
-        {
-            'type': 'new_alert',
-            'alert': alert_data
-        }
-    )
-```
-
-#### Step 7: Update Views to Broadcast
-Update `apps/sensors/views.py` `AnomalyTriggerView`:
-
-```python
-# Add after node.save()
-from apps.factory_graph.utils.broadcast import broadcast_node_status_change
-broadcast_node_status_change(node.manufacturer_id, node_id, new_status)
-```
-
-### Testing WebSockets
-
-#### Manual Testing with websocat:
-```bash
-# Install websocat
-brew install websocat
-
-# Connect to WebSocket
-websocat ws://127.0.0.1:8000/ws/factory/1/
-
-# Send message
-{"type": "request_status"}
-```
-
-#### Python Test Script:
-```python
-import asyncio
-import websockets
-import json
-
-async def test_websocket():
-    uri = "ws://127.0.0.1:8000/ws/factory/1/"
-    async with websockets.connect(uri) as websocket:
-        # Request initial state
-        await websocket.send(json.dumps({"type": "request_status"}))
-        response = await websocket.recv()
-        print(f"Received: {response}")
-
-asyncio.run(test_websocket())
-```
+1. [Authentication System](#2-authentication-system)
+2. [Hugging Face Vision Integration](#3-hugging-face-vision-integration)
+3. [Azure GPT-4o Report Generation](#4-azure-gpt-4o-report-generation)
+4. [Cloudinary Media Integration](#5-cloudinary-media-integration)
+5. [Unit Tests](#6-unit-tests)
+6. [PostgreSQL/Neon Migration](#7-postgresqlneon-migration)
+7. [Background Tasks with Celery](#8-background-tasks-with-celery)
 
 ---
 
@@ -1596,16 +1347,17 @@ result.get()  # Wait for result
 
 | # | Task | Priority | Time | Status |
 |---|------|----------|------|--------|
-| 1 | WebSocket Consumers | High | 4-6h | ⬜ |
-| 2 | Authentication (JWT) | High | 3-4h | ⬜ |
-| 3 | Hugging Face Integration | Medium | 6-8h | ⬜ |
-| 4 | Azure GPT-4o Integration | Medium | 4-6h | ⬜ |
-| 5 | Cloudinary Integration | Medium | 3-4h | ⬜ |
-| 6 | Unit Tests | Low | 8-10h | ⬜ |
-| 7 | PostgreSQL Migration | Low | 2-3h | ⬜ |
-| 8 | Celery Background Tasks | Low | 4-6h | ⬜ |
+| 1 | WebSocket Consumers | High | 4-6h | ✅ Completed |
+| 2 | Authentication (JWT) | High | 3-4h | ⬜ Not Started |
+| 3 | Hugging Face Integration | Medium | 6-8h | ⬜ Not Started |
+| 4 | Azure GPT-4o Integration | Medium | 4-6h | ⬜ Not Started |
+| 5 | Cloudinary Integration | Medium | 3-4h | ⬜ Not Started |
+| 6 | Unit Tests | Low | 8-10h | ⬜ Not Started |
+| 7 | PostgreSQL Migration | Low | 2-3h | ⬜ Not Started |
+| 8 | Celery Background Tasks | Low | 4-6h | ⬜ Not Started |
 
-**Total Estimated Time:** 34-47 hours
+**Completed:** 1/8 tasks  
+**Remaining Time:** 30-41 hours
 
 ---
 
