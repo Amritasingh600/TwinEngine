@@ -17,16 +17,28 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.response import Response
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def api_root(request):
     """API root endpoint with available endpoints."""
     return Response({
         'message': 'Welcome to TwinEngine Hospitality API',
         'version': '2.0.0',
         'endpoints': {
+            # Authentication
+            'auth': {
+                'login': '/api/auth/token/',
+                'refresh': '/api/auth/token/refresh/',
+                'verify': '/api/auth/token/verify/',
+                'register': '/api/auth/register/',
+                'profile': '/api/auth/me/',
+                'change-password': '/api/auth/change-password/',
+            },
+            # Resources
             'brands': '/api/brands/',
             'outlets': '/api/outlets/',
             'staff': '/api/staff/',
@@ -50,6 +62,9 @@ urlpatterns = [
     
     # API Root
     path('api/', api_root, name='api-root'),
+    
+    # Authentication endpoints
+    path('api/auth/', include('apps.hospitality_group.auth_urls')),
     
     # App URLs
     path('api/', include('apps.hospitality_group.urls')),

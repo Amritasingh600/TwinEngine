@@ -1,6 +1,11 @@
-from rest_framework import viewsets, status, filters
+from rest_framework import viewsets, status, filters, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.views import APIView
+from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Brand, Outlet, UserProfile
 from .serializers import (
@@ -8,6 +13,7 @@ from .serializers import (
     OutletSerializer, OutletListSerializer,
     UserProfileSerializer, UserProfileCreateSerializer
 )
+from .permissions import IsManager, IsManagerOrReadOnly, IsOutletUser
 
 
 class BrandViewSet(viewsets.ModelViewSet):
@@ -144,3 +150,156 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         profile.delete()
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ============================================================================
+# AUTHENTICATION VIEWS
+# ============================================================================
+
+class RegisterView(generics.CreateAPIView):
+    """
+    Register a new user with profile.
+    
+    POST /api/auth/register/
+    Body: {
+        "username": "john_doe",
+        "email": "john@example.com",
+        "password": "secure_password",
+        "outlet": 1,
+        "role": "STAFF",
+        "phone": "9876543210"
+    }
+    """
+    permission_classes = [AllowAny]
+    serializer_class = UserProfileCreateSerializer
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Extract user data
+        username = serializer.validated_data['user']['username']
+        email = serializer.validated_data['user']['email']
+        password = serializer.validated_data['user']['password']
+        
+        # Validate password
+        try:
+            validate_password(password)
+        except ValidationError as e:
+            return Response(
+                {'password': list(e.messages)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create user
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password
+        )
+        
+        # Create profile
+        profile = UserProfile.objects.create(
+            user=user,
+            outlet=serializer.validated_data['outlet'],
+            role=serializer.validated_data.get('role', 'STAFF'),
+            phone=serializer.validated_data.get('phone', ''),
+            is_active=serializer.validated_data.get('is_active', True)
+        )
+        
+        return Response(
+            UserProfileSerializer(profile).data,
+            status=status.HTTP_201_CREATED
+        )
+
+
+class UserProfileView(APIView):
+    """
+    Get or update the current authenticated user's profile.
+    
+    GET /api/auth/me/
+    PUT /api/auth/me/
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get current user profile."""
+        try:
+            profile = request.user.profile
+            serializer = UserProfileSerializer(profile)
+            return Response(serializer.data)
+        except UserProfile.DoesNotExist:
+            return Response(
+                {'error': 'User profile not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    def put(self, request):
+        """Update current user profile."""
+        try:
+            profile = request.user.profile
+            
+            # Only allow updating certain fields
+            allowed_fields = ['phone', 'is_on_shift']
+            update_data = {k: v for k, v in request.data.items() if k in allowed_fields}
+            
+            for field, value in update_data.items():
+                setattr(profile, field, value)
+            
+            profile.save()
+            serializer = UserProfileSerializer(profile)
+            return Response(serializer.data)
+        except UserProfile.DoesNotExist:
+            return Response(
+                {'error': 'User profile not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class ChangePasswordView(APIView):
+    """
+    Change password for the authenticated user.
+    
+    POST /api/auth/change-password/
+    Body: {
+        "old_password": "current_password",
+        "new_password": "new_secure_password"
+    }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        user = request.user
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+        
+        if not old_password or not new_password:
+            return Response(
+                {'error': 'Both old_password and new_password are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check old password
+        if not user.check_password(old_password):
+            return Response(
+                {'error': 'Old password is incorrect.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate new password
+        try:
+            validate_password(new_password, user)
+        except ValidationError as e:
+            return Response(
+                {'error': list(e.messages)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Set new password
+        user.set_password(new_password)
+        user.save()
+        
+        return Response(
+            {'message': 'Password changed successfully.'},
+            status=status.HTTP_200_OK
+        )
