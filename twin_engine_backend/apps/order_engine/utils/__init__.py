@@ -1,6 +1,9 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def broadcast_order_created(outlet_id: int, order_data: dict):
@@ -12,24 +15,25 @@ def broadcast_order_created(outlet_id: int, order_data: dict):
         order_data: Order details dictionary
     """
     channel_layer = get_channel_layer()
+    if not channel_layer:
+        logger.warning("No channel layer configured - WebSocket broadcast skipped")
+        return
     
-    # Broadcast to outlet-specific room
-    async_to_sync(channel_layer.group_send)(
-        f'orders_{outlet_id}',
-        {
+    try:
+        message = {
             'type': 'order_created',
             'order': order_data,
+            'timestamp': datetime.now().isoformat(),
         }
-    )
-    
-    # Also broadcast to global room
-    async_to_sync(channel_layer.group_send)(
-        'orders_global',
-        {
-            'type': 'order_created',
-            'order': order_data,
-        }
-    )
+        
+        # Broadcast to outlet-specific room
+        async_to_sync(channel_layer.group_send)(f'orders_{outlet_id}', message)
+        
+        # Also broadcast to global room
+        async_to_sync(channel_layer.group_send)('orders_global', message)
+        
+    except Exception as e:
+        logger.warning(f"Order created broadcast failed: {e}")
 
 
 def broadcast_order_updated(outlet_id: int, order_id: int, old_status: str, new_status: str, table_id: int = None):
@@ -44,18 +48,25 @@ def broadcast_order_updated(outlet_id: int, order_id: int, old_status: str, new_
         table_id: Optional table ID
     """
     channel_layer = get_channel_layer()
+    if not channel_layer:
+        logger.warning("No channel layer configured - WebSocket broadcast skipped")
+        return
     
-    message = {
-        'type': 'order_updated',
-        'order_id': order_id,
-        'old_status': old_status,
-        'new_status': new_status,
-        'table_id': table_id,
-        'timestamp': datetime.now().isoformat(),
-    }
-    
-    async_to_sync(channel_layer.group_send)(f'orders_{outlet_id}', message)
-    async_to_sync(channel_layer.group_send)('orders_global', message)
+    try:
+        message = {
+            'type': 'order_updated',
+            'order_id': order_id,
+            'old_status': old_status,
+            'new_status': new_status,
+            'table_id': table_id,
+            'timestamp': datetime.now().isoformat(),
+        }
+        
+        async_to_sync(channel_layer.group_send)(f'orders_{outlet_id}', message)
+        async_to_sync(channel_layer.group_send)('orders_global', message)
+        
+    except Exception as e:
+        logger.warning(f"Order updated broadcast failed: {e}")
 
 
 def broadcast_order_completed(outlet_id: int, order_id: int, table_id: int, total: float):
@@ -69,13 +80,21 @@ def broadcast_order_completed(outlet_id: int, order_id: int, table_id: int, tota
         total: Order total amount
     """
     channel_layer = get_channel_layer()
+    if not channel_layer:
+        logger.warning("No channel layer configured - WebSocket broadcast skipped")
+        return
     
-    message = {
-        'type': 'order_completed',
-        'order_id': order_id,
-        'table_id': table_id,
-        'total': total,
-    }
-    
-    async_to_sync(channel_layer.group_send)(f'orders_{outlet_id}', message)
-    async_to_sync(channel_layer.group_send)('orders_global', message)
+    try:
+        message = {
+            'type': 'order_completed',
+            'order_id': order_id,
+            'table_id': table_id,
+            'total': total,
+            'timestamp': datetime.now().isoformat(),
+        }
+        
+        async_to_sync(channel_layer.group_send)(f'orders_{outlet_id}', message)
+        async_to_sync(channel_layer.group_send)('orders_global', message)
+        
+    except Exception as e:
+        logger.warning(f"Order completed broadcast failed: {e}")

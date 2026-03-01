@@ -61,3 +61,35 @@
   - All authentication endpoints tested and verified working
   - Updated `requirements.txt` with JWT dependencies
   - Made API root publicly accessible while protecting other endpoints
+
+- **1 Mar 2026** → **Table Status Auto-Update Logic - COMPLETED ✅**
+  - Implemented Django signals for automatic table color updates based on order lifecycle
+  - Status mapping logic:
+    - Order PLACED/PREPARING/READY → Table turns YELLOW (waiting)
+    - Order SERVED → Table turns GREEN (delivered)
+    - Order COMPLETED/CANCELLED → Table turns BLUE (if no other active orders)
+    - Wait time > 15 min → Table turns RED (needs attention)
+  - Created status transition validation:
+    - PLACED → PREPARING → READY → SERVED → COMPLETED
+    - Any state → CANCELLED (allowed)
+    - Invalid transitions raise ValidationError
+  - Enhanced WebSocket broadcasts:
+    - `broadcast_node_status_change()` - Real-time 3D floor updates
+    - `broadcast_order_created()` - New order notifications
+    - `broadcast_order_updated()` - Status change notifications
+    - `broadcast_order_completed()` - Order completion alerts
+    - `broadcast_wait_time_alert()` - Long wait time warnings
+  - Created management command `check_wait_times`:
+    - Marks tables RED when orders exceed threshold
+    - Options: `--outlet`, `--threshold`, `--dry-run`
+    - For cron: `*/2 * * * * python manage.py check_wait_times`
+  - Added model properties to OrderTicket:
+    - `wait_time_minutes` - Calculate current wait time
+    - `is_long_wait` - Check if > 15 minute threshold
+  - Created comprehensive test suite (11 tests passing):
+    - Test order → YELLOW transition
+    - Test served → GREEN transition
+    - Test completed → BLUE transition
+    - Test multiple orders on same table
+    - Test status transition validation
+    - Test wait time management command

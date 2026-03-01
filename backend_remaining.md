@@ -43,31 +43,100 @@ This document outlines all remaining backend tasks with detailed implementation 
 
 ---
 
+### 3. JWT Authentication System - COMPLETED
+
+**Completed On:** March 1, 2026
+
+#### What Was Implemented:
+- JWT token-based authentication using `djangorestframework-simplejwt`
+- 6 authentication endpoints:
+  | Endpoint | Method | Purpose |
+  |----------|--------|---------|
+  | `/api/auth/token/` | POST | Login - obtain JWT tokens |
+  | `/api/auth/token/refresh/` | POST | Refresh access token |
+  | `/api/auth/token/verify/` | POST | Verify token validity |
+  | `/api/auth/register/` | POST | User registration with profile |
+  | `/api/auth/me/` | GET/PUT | Get/update user profile |
+  | `/api/auth/change-password/` | POST | Secure password change |
+
+- JWT Configuration:
+  - Access token lifetime: 1 hour
+  - Refresh token lifetime: 7 days
+  - Token rotation enabled
+
+- Custom permission classes:
+  | Permission | Description |
+  |------------|-------------|
+  | `IsOutletUser` | Users can only access their outlet's data |
+  | `IsManager` | Manager-only endpoints |
+  | `IsManagerOrReadOnly` | Managers edit, others read-only |
+  | `IsStaffOrManager` | Staff + Manager access |
+
+- Management command `create_demo_users`:
+  - Creates demo brand: "Demo Restaurant Group"
+  - Creates demo outlet: "Downtown Cafe" (Mumbai)
+  - Creates 3 test users: manager_demo, waiter_demo, chef_demo
+
+#### Files Created/Modified:
+- `apps/hospitality_group/auth_urls.py` - Authentication URL routes
+- `apps/hospitality_group/permissions.py` - Custom permission classes
+- `apps/hospitality_group/views.py` - Auth views (Register, Profile, ChangePassword)
+- `apps/hospitality_group/management/commands/create_demo_users.py` - Demo data command
+- `twinengine_core/settings.py` - JWT settings, env variables
+- `twinengine_core/urls.py` - Auth route registration
+- `twin_engine_backend/.gitignore` - Backend-specific ignores
+
+---
+
+### 3. Table Status Auto-Update Logic ✅
+
+**Completed:** March 1, 2025
+
+**Implementation Summary:**
+- Django signals (pre_save/post_save) for automatic table status updates
+- Status mapping: PLACED/PREPARING/READY → YELLOW, SERVED → GREEN, COMPLETED/CANCELLED → BLUE
+- Validated status transitions (PLACED → PREPARING → READY → SERVED → COMPLETED)
+- Wait time properties on OrderTicket model
+- WebSocket broadcasts for all status changes
+- Management command `check_wait_times` for RED alerts
+
+#### Files Created:
+- `apps/order_engine/signals.py` - Signal handlers (260 lines)
+- `apps/order_engine/management/commands/check_wait_times.py` - Wait time checker
+- `apps/order_engine/tests/test_table_status.py` - 11 comprehensive tests
+
+#### Files Modified:
+- `apps/order_engine/models.py` - Added `wait_time_minutes`, `is_long_wait` properties
+- `apps/order_engine/apps.py` - Signal registration in `ready()`
+- `apps/layout_twin/utils/broadcast.py` - Added `broadcast_wait_time_alert()`
+- `apps/layout_twin/consumers/floor_consumer.py` - Added `wait_time_alert()` handler
+- `apps/order_engine/utils/__init__.py` - Enhanced order broadcasts with error handling
+
+---
+
 ## Remaining Tasks
 
 ## Table of Contents
 
 ### High Priority (Must Have)
-1. [Authentication System](#1-authentication-system)
-2. [Table Status Auto-Update Logic](#2-table-status-auto-update-logic)
-3. [Admin Panel Customization](#3-admin-panel-customization)
-4. [PostgreSQL/Neon Migration](#4-postgresqlneon-migration)
-5. [Environment & CORS Configuration](#5-environment--cors-configuration)
+1. [Admin Panel Customization](#1-admin-panel-customization)
+2. [PostgreSQL/Neon Migration](#2-postgresqlneon-migration)
+3. [Environment & CORS Configuration](#3-environment--cors-configuration)
 
 ### Medium Priority (Should Have)
-6. [Azure GPT-4o Report Generation](#6-azure-gpt-4o-report-generation)
-7. [Cloudinary Media Integration](#7-cloudinary-media-integration)
-8. [Demand Forecasting ML](#8-demand-forecasting-ml)
-9. [API Documentation (Swagger)](#9-api-documentation-swagger)
-10. [Data Seeding & Fixtures](#10-data-seeding--fixtures)
+4. [Azure GPT-4o Report Generation](#4-azure-gpt-4o-report-generation)
+5. [Cloudinary Media Integration](#5-cloudinary-media-integration)
+6. [Demand Forecasting ML](#6-demand-forecasting-ml)
+7. [API Documentation (Swagger)](#7-api-documentation-swagger)
+8. [Data Seeding & Fixtures](#8-data-seeding--fixtures)
 
 ### Lower Priority (Nice to Have)
-11. [Unit & Integration Tests](#11-unit--integration-tests)
-12. [Background Tasks with Celery](#12-background-tasks-with-celery)
-13. [Email Notifications](#13-email-notifications)
-14. [Rate Limiting & Throttling](#14-rate-limiting--throttling)
-15. [Logging & Error Monitoring](#15-logging--error-monitoring)
-16. [Deployment Guide](#16-deployment-guide)
+9. [Unit & Integration Tests](#9-unit--integration-tests)
+10. [Background Tasks with Celery](#10-background-tasks-with-celery)
+11. [Email Notifications](#11-email-notifications)
+12. [Rate Limiting & Throttling](#12-rate-limiting--throttling)
+13. [Logging & Error Monitoring](#13-logging--error-monitoring)
+14. [Deployment Guide](#14-deployment-guide)
 
 ---
 
@@ -75,239 +144,7 @@ This document outlines all remaining backend tasks with detailed implementation 
 
 ---
 
-## 1. Authentication System
-
-**Priority:** 🔴 High  
-**Estimated Time:** 3-4 hours  
-**Dependencies:** `djangorestframework-simplejwt`
-
-### Purpose
-Secure API endpoints with JWT authentication for:
-- User login/logout
-- Token refresh
-- Role-based access (Manager/Staff/Viewer)
-
-### Implementation Steps
-
-#### Step 1: Install Dependencies
-```bash
-pip install djangorestframework-simplejwt
-```
-
-#### Step 2: Update Settings
-```python
-# twinengine_core/settings.py
-
-INSTALLED_APPS = [
-    # ... existing apps
-    'rest_framework_simplejwt',
-]
-
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-}
-
-from datetime import timedelta
-
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'AUTH_HEADER_TYPES': ('Bearer',),
-}
-```
-
-#### Step 3: Create Auth URLs
-Create `apps/hospitality_group/auth_urls.py`:
-
-```python
-from django.urls import path
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView, TokenRefreshView, TokenVerifyView,
-)
-from .views import RegisterView, UserProfileView
-
-urlpatterns = [
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),
-    path('register/', RegisterView.as_view(), name='register'),
-    path('me/', UserProfileView.as_view(), name='user-profile'),
-]
-```
-
-#### Step 4: Add Custom Permissions
-Create `apps/hospitality_group/permissions.py`:
-
-```python
-from rest_framework import permissions
-
-class IsOutletUser(permissions.BasePermission):
-    """Only allow users to access their own outlet's data."""
-    def has_object_permission(self, request, view, obj):
-        if hasattr(obj, 'outlet'):
-            return obj.outlet == request.user.profile.outlet
-        return True
-
-class IsManagerOrReadOnly(permissions.BasePermission):
-    """Managers can edit, others can only read."""
-    def has_permission(self, request, view):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return request.user.profile.role == 'MANAGER'
-```
-
-#### Step 5: Update Main URLs
-```python
-# twinengine_core/urls.py
-path('api/auth/', include('apps.hospitality_group.auth_urls')),
-```
-
-### Testing
-```bash
-# Get JWT token
-curl -X POST http://127.0.0.1:8000/api/auth/token/ \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
-
-# Access protected endpoint
-curl http://127.0.0.1:8000/api/outlets/ \
-  -H "Authorization: Bearer <access_token>"
-```
-
----
-
-## 2. Table Status Auto-Update Logic
-
-**Priority:** 🔴 High  
-**Estimated Time:** 2-3 hours
-
-### Purpose
-Automatically update table (ServiceNode) status based on order lifecycle:
-- Order Placed → Table turns YELLOW
-- Order Served → Table turns GREEN
-- Order Completed → Table turns BLUE (available)
-- Wait time exceeded → Table turns RED
-
-### Implementation
-
-#### Step 1: Create Signal Handlers
-Create `apps/order_engine/signals.py`:
-
-```python
-from django.db.models.signals import post_save, pre_save
-from django.dispatch import receiver
-from django.utils import timezone
-from datetime import timedelta
-from .models import OrderTicket
-
-@receiver(pre_save, sender=OrderTicket)
-def capture_old_status(sender, instance, **kwargs):
-    if instance.pk:
-        try:
-            instance._old_status = OrderTicket.objects.get(pk=instance.pk).status
-        except OrderTicket.DoesNotExist:
-            instance._old_status = None
-    else:
-        instance._old_status = None
-
-@receiver(post_save, sender=OrderTicket)
-def update_table_status_on_order_change(sender, instance, created, **kwargs):
-    """Update table status when order status changes."""
-    from apps.layout_twin.models import ServiceNode
-    from apps.layout_twin.utils import broadcast_node_status_change
-    
-    table = instance.table
-    old_table_status = table.current_status
-    new_status = None
-    
-    if created or instance.status == 'PLACED':
-        new_status = 'YELLOW'  # Order in progress
-    elif instance.status == 'SERVED':
-        new_status = 'GREEN'   # Order delivered
-    elif instance.status == 'COMPLETED':
-        # Check if table has other active orders
-        active_orders = OrderTicket.objects.filter(
-            table=table,
-            status__in=['PLACED', 'PREPARING', 'READY', 'SERVED']
-        ).exclude(pk=instance.pk).exists()
-        
-        if not active_orders:
-            new_status = 'BLUE'  # Table available
-    elif instance.status == 'CANCELLED':
-        active_orders = OrderTicket.objects.filter(
-            table=table,
-            status__in=['PLACED', 'PREPARING', 'READY', 'SERVED']
-        ).exclude(pk=instance.pk).exists()
-        
-        if not active_orders:
-            new_status = 'BLUE'
-    
-    if new_status and new_status != old_table_status:
-        table.current_status = new_status
-        table.save()
-        
-        # Broadcast via WebSocket
-        broadcast_node_status_change(
-            outlet_id=table.outlet_id,
-            node_id=table.id,
-            old_status=old_table_status,
-            new_status=new_status
-        )
-```
-
-#### Step 2: Register Signals
-Update `apps/order_engine/apps.py`:
-
-```python
-from django.apps import AppConfig
-
-class OrderEngineConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'apps.order_engine'
-    
-    def ready(self):
-        import apps.order_engine.signals  # noqa
-```
-
-#### Step 3: Create Wait Time Alert Management Command
-Create `apps/order_engine/management/commands/check_wait_times.py`:
-
-```python
-from django.core.management.base import BaseCommand
-from django.utils import timezone
-from datetime import timedelta
-
-class Command(BaseCommand):
-    help = 'Check for tables with exceeded wait times'
-    
-    def handle(self, *args, **options):
-        from apps.order_engine.models import OrderTicket
-        from apps.layout_twin.models import ServiceNode
-        
-        threshold = timezone.now() - timedelta(minutes=15)
-        
-        long_wait_orders = OrderTicket.objects.filter(
-            status__in=['PLACED', 'PREPARING'],
-            placed_at__lt=threshold
-        ).select_related('table')
-        
-        for order in long_wait_orders:
-            if order.table.current_status != 'RED':
-                order.table.current_status = 'RED'
-                order.table.save()
-                self.stdout.write(f'Table {order.table.name} marked RED')
-```
-
----
-
-## 3. Admin Panel Customization
+## 1. Admin Panel Customization
 
 **Priority:** 🔴 High  
 **Estimated Time:** 2-3 hours
@@ -368,7 +205,7 @@ class OrderTicketAdmin(admin.ModelAdmin):
 
 ---
 
-## 4. PostgreSQL/Neon Migration
+## 2. PostgreSQL/Neon Migration
 
 **Priority:** 🔴 High  
 **Estimated Time:** 2-3 hours
@@ -412,7 +249,7 @@ python manage.py loaddata backup.json
 
 ---
 
-## 5. Environment & CORS Configuration
+## 3. Environment & CORS Configuration
 
 **Priority:** 🔴 High  
 **Estimated Time:** 1-2 hours
@@ -465,7 +302,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 ---
 
-## 6. Azure GPT-4o Report Generation
+## 4. Azure GPT-4o Report Generation
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 4-6 hours  
@@ -482,7 +319,7 @@ Create `apps/insights_hub/services/report_service.py` with Azure OpenAI integrat
 
 ---
 
-## 7. Cloudinary Media Integration
+## 5. Cloudinary Media Integration
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 2-3 hours  
@@ -493,7 +330,7 @@ Store and serve PDF reports and media via Cloudinary CDN.
 
 ---
 
-## 8. Demand Forecasting ML
+## 6. Demand Forecasting ML
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 6-8 hours  
@@ -507,7 +344,7 @@ ML predictions for:
 
 ---
 
-## 9. API Documentation (Swagger)
+## 7. API Documentation (Swagger)
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 2-3 hours  
@@ -530,7 +367,7 @@ urlpatterns = [
 
 ---
 
-## 10. Data Seeding & Fixtures
+## 8. Data Seeding & Fixtures
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 2-3 hours
@@ -596,7 +433,7 @@ class Command(BaseCommand):
 
 ---
 
-## 11. Unit & Integration Tests
+## 9. Unit & Integration Tests
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 4-6 hours
@@ -608,7 +445,7 @@ coverage run manage.py test && coverage report
 
 ---
 
-## 12. Background Tasks with Celery
+## 10. Background Tasks with Celery
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 4-5 hours
@@ -622,7 +459,7 @@ celery -A twinengine_core worker -B -l info
 
 ---
 
-## 13. Email Notifications
+## 11. Email Notifications
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 2-3 hours
@@ -631,7 +468,7 @@ Email alerts for daily reports, low inventory, and long wait times.
 
 ---
 
-## 14. Rate Limiting & Throttling
+## 12. Rate Limiting & Throttling
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 1-2 hours
@@ -647,7 +484,7 @@ REST_FRAMEWORK = {
 
 ---
 
-## 15. Logging & Error Monitoring
+## 13. Logging & Error Monitoring
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 2-3 hours
@@ -656,7 +493,7 @@ Consider integrating Sentry for production error tracking.
 
 ---
 
-## 16. Deployment Guide
+## 14. Deployment Guide
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 3-4 hours
@@ -675,38 +512,38 @@ Consider integrating Sentry for production error tracking.
 |---|------|----------|--------|-----------|
 | ✅ | WebSocket Consumers | High | Done | 4h |
 | ✅ | Architecture Setup | High | Done | 4h |
-| 1 | Authentication System | 🔴 High | Pending | 3-4h |
-| 2 | Table Status Auto-Update | 🔴 High | Pending | 2-3h |
-| 3 | Admin Panel Customization | 🔴 High | Pending | 2-3h |
-| 4 | PostgreSQL/Neon Migration | 🔴 High | Pending | 2-3h |
-| 5 | Environment & CORS Config | 🔴 High | Pending | 1-2h |
-| 6 | Azure GPT-4o Reports | 🟡 Medium | Pending | 4-6h |
-| 7 | Cloudinary Integration | 🟡 Medium | Pending | 2-3h |
-| 8 | Demand Forecasting ML | 🟡 Medium | Pending | 6-8h |
-| 9 | API Documentation | 🟡 Medium | Pending | 2-3h |
-| 10 | Data Seeding & Fixtures | 🟡 Medium | Pending | 2-3h |
-| 11 | Unit & Integration Tests | 🟢 Lower | Pending | 4-6h |
-| 12 | Celery Background Tasks | 🟢 Lower | Pending | 4-5h |
-| 13 | Email Notifications | 🟢 Lower | Pending | 2-3h |
-| 14 | Rate Limiting | 🟢 Lower | Pending | 1-2h |
-| 15 | Logging & Monitoring | 🟢 Lower | Pending | 2-3h |
-| 16 | Deployment Guide | 🟢 Lower | Pending | 3-4h |
+| ✅ | JWT Authentication | High | Done | 3-4h |
+| ✅ | Table Status Auto-Update | High | Done | 2-3h |
+| 1 | Admin Panel Customization | 🔴 High | Pending | 2-3h |
+| 2 | PostgreSQL/Neon Migration | 🔴 High | Pending | 2-3h |
+| 3 | Environment & CORS Config | 🔴 High | Pending | 1-2h |
+| 4 | Azure GPT-4o Reports | 🟡 Medium | Pending | 4-6h |
+| 5 | Cloudinary Integration | 🟡 Medium | Pending | 2-3h |
+| 6 | Demand Forecasting ML | 🟡 Medium | Pending | 6-8h |
+| 7 | API Documentation | 🟡 Medium | Pending | 2-3h |
+| 8 | Data Seeding & Fixtures | 🟡 Medium | Pending | 2-3h |
+| 9 | Unit & Integration Tests | 🟢 Lower | Pending | 4-6h |
+| 10 | Celery Background Tasks | 🟢 Lower | Pending | 4-5h |
+| 11 | Email Notifications | 🟢 Lower | Pending | 2-3h |
+| 12 | Rate Limiting | 🟢 Lower | Pending | 1-2h |
+| 13 | Logging & Monitoring | 🟢 Lower | Pending | 2-3h |
+| 14 | Deployment Guide | 🟢 Lower | Pending | 3-4h |
 
-**Total Estimated Time:** ~50-65 hours
+**Total Estimated Time:** ~44-59 hours remaining (4 completed, 14 pending)
 
 ---
 
 ## Quick Start Checklist
 
 ### To get MVP running:
-- [ ] Task 1: Authentication System
-- [ ] Task 2: Table Status Auto-Update Logic
-- [ ] Task 4: PostgreSQL Migration
-- [ ] Task 5: Environment Configuration
-- [ ] Task 10: Seed Sample Data
+- [x] JWT Authentication System ✅
+- [x] Table Status Auto-Update Logic ✅
+- [ ] Task 2: PostgreSQL Migration
+- [ ] Task 3: Environment Configuration
+- [ ] Task 8: Seed Sample Data
 
 ### For production release add:
-- [ ] Task 3: Admin Panel
-- [ ] Task 6: AI Reports
-- [ ] Task 9: API Docs
-- [ ] Task 16: Deployment
+- [ ] Task 1: Admin Panel
+- [ ] Task 4: AI Reports
+- [ ] Task 7: API Docs
+- [ ] Task 14: Deployment

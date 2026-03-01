@@ -203,24 +203,67 @@ TwinEngine follows a **Layered Cloud Architecture** designed to separate AI proc
 | `predictive_core` | AI predictions & forecasting | SalesData, InventoryItem, StaffSchedule |
 | `insights_hub` | Reporting & analytics | DailySummary, PDFReport |
 
-### 8.3 API Specifications
+### 8.3 Authentication System
+
+TwinEngine uses **JWT (JSON Web Token)** authentication via `djangorestframework-simplejwt`.
+
+#### Authentication Endpoints
+
+| Endpoint | Method | Purpose | Auth Required |
+|----------|--------|---------|---------------|
+| `/api/auth/token/` | POST | Login - obtain access & refresh tokens | No |
+| `/api/auth/token/refresh/` | POST | Refresh expired access token | No (refresh token) |
+| `/api/auth/token/verify/` | POST | Verify token validity | No |
+| `/api/auth/register/` | POST | Register new user with profile | No |
+| `/api/auth/me/` | GET/PUT | Get or update authenticated user profile | Yes |
+| `/api/auth/change-password/` | POST | Change password securely | Yes |
+
+#### JWT Configuration
+
+- **Access Token Lifetime:** 1 hour
+- **Refresh Token Lifetime:** 7 days
+- **Token Rotation:** Enabled (new refresh token on each refresh)
+- **Header Format:** `Authorization: Bearer <access_token>`
+
+#### Role-Based Permissions
+
+| Permission Class | Description |
+|-----------------|-------------|
+| `IsOutletUser` | Users can only access their assigned outlet's data |
+| `IsManager` | Manager-only access to sensitive endpoints |
+| `IsManagerOrReadOnly` | Managers can edit, staff/viewers read-only |
+| `IsStaffOrManager` | Staff and managers can access |
+
+#### Demo Users (for testing)
+
+Run `python manage.py create_demo_users` to create:
+
+| Username | Password | Role |
+|----------|----------|------|
+| manager_demo | manager123 | MANAGER |
+| waiter_demo | waiter123 | WAITER |
+| chef_demo | chef123 | CHEF |
+
+### 8.4 API Specifications
 
 | Endpoint | Method | Purpose | Response |
 |----------|--------|---------|----------|
-| `/api/outlets/` | GET | Fetch all outlets for a brand | `[{id, name, address, status}]` |
-| `/api/nodes/` | GET | Fetch all service nodes for 3D rendering | `[{id, name, status, position}]` |
+| `/api/brands/` | GET/POST | Brand management | `[{id, name, brand_code, tier}]` |
+| `/api/outlets/` | GET/POST | Fetch/create outlets | `[{id, name, address, status}]` |
+| `/api/staff/` | GET/POST | Staff profile management | `[{id, user, outlet, role}]` |
+| `/api/nodes/` | GET/POST | Fetch all service nodes for 3D rendering | `[{id, name, status, position}]` |
 | `/api/orders/` | GET/POST | Order lifecycle management | `{id, table, status, items, total}` |
 | `/api/reports/generate/` | POST | Generate AI operational report | `{report_url, summary}` |
 | `/api/predictions/demand/` | GET | Get demand forecast | `{date, predicted_covers, confidence}` |
 
-### 8.4 WebSocket Endpoints
+### 8.5 WebSocket Endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
 | `ws://host/ws/floor/<outlet_id>/` | Real-time floor status updates |
 | `ws://host/ws/orders/<outlet_id>/` | Live order status stream |
 
-### 8.5 Data Design: Core Entities
+### 8.6 Data Design: Core Entities
 
 - **Outlet:** Restaurant/cafe location with address, manager, and configuration.
 - **ServiceNode:** Tables, kitchen stations, or service areas with 3D position and status.

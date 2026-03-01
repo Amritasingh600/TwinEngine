@@ -70,20 +70,18 @@ class OrderTicket(models.Model):
     def __str__(self):
         return f"Order #{self.pk} - {self.table.name} ({self.status})"
     
-    def save(self, *args, **kwargs):
-        """Auto-update table status based on order status."""
-        super().save(*args, **kwargs)
-        # Update table color based on order status
-        status_map = {
-            'PLACED': 'RED',
-            'PREPARING': 'RED',
-            'READY': 'YELLOW',
-            'SERVED': 'GREEN',
-            'COMPLETED': 'BLUE',
-            'CANCELLED': 'BLUE',
-        }
-        self.table.current_status = status_map.get(self.status, 'BLUE')
-        self.table.save(update_fields=['current_status', 'updated_at'])
+    @property
+    def wait_time_minutes(self):
+        """Calculate wait time since order was placed."""
+        from django.utils import timezone
+        if self.served_at:
+            return int((self.served_at - self.placed_at).total_seconds() / 60)
+        return int((timezone.now() - self.placed_at).total_seconds() / 60)
+    
+    @property
+    def is_long_wait(self):
+        """Check if order has exceeded 15 minute wait threshold."""
+        return self.status in ['PLACED', 'PREPARING'] and self.wait_time_minutes > 15
 
 
 class PaymentLog(models.Model):

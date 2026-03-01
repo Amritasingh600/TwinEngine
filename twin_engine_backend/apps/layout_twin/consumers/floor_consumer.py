@@ -67,6 +67,18 @@ class FloorConsumer(AsyncWebsocketConsumer):
             'timestamp': event.get('timestamp'),
         }))
     
+    async def wait_time_alert(self, event):
+        """Handle wait time alert for tables exceeding threshold."""
+        await self.send(text_data=json.dumps({
+            'type': 'wait_time_alert',
+            'node_id': event['node_id'],
+            'node_name': event.get('node_name', ''),
+            'wait_minutes': event['wait_minutes'],
+            'order_count': event.get('order_count', 1),
+            'alert_level': event.get('alert_level', 'warning'),
+            'timestamp': event.get('timestamp'),
+        }))
+    
     @database_sync_to_async
     def get_floor_state(self):
         """Get current floor state for the outlet."""
