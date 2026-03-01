@@ -83,7 +83,3 @@ class UserProfile(models.Model):
     
     def __str__(self):
         return f"{self.user.username} ({self.role}) - {self.outlet.name}"
-        verbose_name_plural = 'User Profiles'
-    
-    def __str__(self):
-        return f"{self.user.username} - {self.manufacturer.name} ({self.role})"
