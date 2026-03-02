@@ -1,0 +1,4 @@
+# Procfile for Render / Heroku deployment
+# Uses Daphne (ASGI) for WebSocket support
+
+web: daphne -b 0.0.0.0 -p $PORT twinengine_core.asgi:application

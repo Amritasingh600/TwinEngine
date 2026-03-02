@@ -177,6 +177,65 @@ This document outlines all remaining backend tasks with detailed implementation 
 
 ---
 
+### 6. Environment & CORS Configuration - COMPLETED
+
+**Completed On:** March 2, 2026
+
+#### What Was Implemented:
+
+**Phase 1 — Environment Foundation:**
+- `.env` file with 16 env vars (Django, DB, CORS, CSRF, Redis, Azure, Cloudinary, Email, Sentry, Logging)
+- `.env.example` template with all keys documented
+- `settings.py` fully env-driven: SECRET_KEY, DEBUG, ALLOWED_HOSTS, TIME_ZONE, REDIS_URL
+- Channel layer auto-switches: InMemoryChannelLayer (dev) ↔ RedisChannelLayer (prod)
+- `dj-database-url` added to requirements (ready for future PostgreSQL switch)
+
+**Phase 2 — CORS & Security:**
+- Explicit `CORS_ALLOW_HEADERS` whitelist (authorization, content-type, x-csrftoken, etc.)
+- Explicit `CORS_ALLOW_METHODS` whitelist (GET, POST, PUT, PATCH, DELETE, OPTIONS)
+- `CSRF_TRUSTED_ORIGINS` env-driven
+- Production security hardening gated behind `DEBUG=False`:
+  - HTTPS/HSTS (1-year, preload)
+  - Secure cookies (HttpOnly, SameSite=Lax)
+  - X_FRAME_OPTIONS=DENY, XSS filter, content-type nosniff
+  - SECURE_PROXY_SSL_HEADER for cloud load balancers
+
+**Phase 3 — Data Migration Utilities:**
+- `export_data` management command — dumps all app data to JSON (with `--include-auth`, `--apps`, `--indent`)
+- `import_data` management command — loads fixtures (with `--flush`, `--dry-run`, `--ignore-errors`)
+- PostgreSQL sequence reset on import
+- `Makefile` with 22 targets (db-backup, db-restore, db-reset, test, run, etc.)
+
+**Phase 4 — Static Files & Production:**
+- WhiteNoise `CompressedManifestStaticFilesStorage` (gzip + cache-busting hashes)
+- `STATIC_ROOT`, `STATICFILES_DIRS`, `MEDIA_URL`, `MEDIA_ROOT` configured
+- Structured logging: console + rotating file handler (5 MB, 3 backups)
+- Separate loggers for `django`, `django.request`, `apps.*`
+- `Procfile` (Daphne ASGI for Render/Heroku)
+- `build.sh` (Render build script: pip install, collectstatic, migrate)
+
+**Phase 5 — Testing:**
+- 52 tests covering all config: env vars, CORS, CSRF, security, channels, static files, logging, export/import commands, .env.example validation, deployment files
+- All 63 tests passing (52 config + 11 signal tests)
+
+#### Files Created:
+- `.env.example` — Full env template with all keys
+- `Makefile` — 22 development/deployment targets
+- `Procfile` — Daphne ASGI deployment
+- `build.sh` — Render build script
+- `logs/.gitkeep` — Log directory
+- `apps/hospitality_group/management/commands/export_data.py` — Data export command
+- `apps/hospitality_group/management/commands/import_data.py` — Data import command
+- `twinengine_core/tests/__init__.py` — 52 configuration tests
+
+#### Files Modified:
+- `twinengine_core/settings.py` — Full env-driven config, CORS, security, logging, WhiteNoise
+- `.env` — Expanded from 6 to 16 keys
+- `.gitignore` — Added logs, backups
+- `requirements.txt` — Added `dj-database-url`
+
+---
+
 ## Remaining Tasks
 
 ## Task Summary
@@ -225,99 +284,33 @@ This document outlines all remaining backend tasks with detailed implementation 
 
 ---
 
-## HIGH PRIORITY TASKS
+## HIGH PRIORITY TASKS (DEFERRED)
 
 ---
 
 ## 1. PostgreSQL/Neon Migration
 
-**Priority:** 🔴 High  
-**Estimated Time:** 2-3 hours
+**Priority:** 🔴 High — **DEFERRED to end of development**  
+**Estimated Time:** 2-3 hours  
+**Prerequisites:** `dj-database-url` already installed, `export_data`/`import_data` commands ready
 
 ### Purpose
 Migrate from SQLite to production PostgreSQL (Neon serverless).
+All tooling is already in place — just needs the Neon connection string.
 
-### Implementation
-
-#### Step 1: Install Driver
+### When Ready:
 ```bash
-pip install psycopg2-binary dj-database-url
-```
+# 1. Export current data
+python manage.py export_data --include-auth -o pre_migration_backup.json
 
-#### Step 2: Update Settings
-```python
-# twinengine_core/settings.py
-import dj_database_url
-
-DATABASES = {
-    'default': dj_database_url.config(
-        default='sqlite:///db.sqlite3',
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-}
-```
-
-#### Step 3: Set Environment Variable
-```bash
-# .env
+# 2. Set DATABASE_URL in .env
 DATABASE_URL=postgresql://user:pass@ep-xxx.region.aws.neon.tech/twinengine?sslmode=require
-```
 
-#### Step 4: Migrate
-```bash
-python manage.py dumpdata > backup.json
+# 3. Update settings.py DATABASES block to use dj_database_url.config()
+
+# 4. Migrate and import
 python manage.py migrate
-python manage.py loaddata backup.json
-```
-
----
-
-## 2. Environment & CORS Configuration
-
-**Priority:** 🔴 High  
-**Estimated Time:** 1-2 hours
-
-### Create `.env.example`:
-```env
-# Django
-DEBUG=True
-SECRET_KEY=your-secret-key-here
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-# Database
-DATABASE_URL=sqlite:///db.sqlite3
-
-# CORS
-CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-
-# Redis (for Channels)
-REDIS_URL=redis://localhost:6379/0
-
-# Azure OpenAI
-AZURE_OPENAI_KEY=
-AZURE_OPENAI_ENDPOINT=
-AZURE_OPENAI_DEPLOYMENT=gpt-4o
-
-# Cloudinary
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
-```
-
-### Update `settings.py`:
-```python
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
-SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost').split(',')
-
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
-CORS_ALLOW_CREDENTIALS = True
+python manage.py import_data pre_migration_backup.json
 ```
 
 ---
@@ -326,7 +319,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 ---
 
-## 3. Azure GPT-4o Report Generation
+## 2. Azure GPT-4o Report Generation
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 4-6 hours  
@@ -343,7 +336,7 @@ Create `apps/insights_hub/services/report_service.py` with Azure OpenAI integrat
 
 ---
 
-## 4. Cloudinary Media Integration
+## 3. Cloudinary Media Integration
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 2-3 hours  
@@ -354,7 +347,7 @@ Store and serve PDF reports and media via Cloudinary CDN.
 
 ---
 
-## 5. Demand Forecasting ML
+## 4. Demand Forecasting ML
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 6-8 hours  
@@ -368,7 +361,7 @@ ML predictions for:
 
 ---
 
-## 6. API Documentation (Swagger)
+## 5. API Documentation (Swagger)
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 2-3 hours  
@@ -391,7 +384,7 @@ urlpatterns = [
 
 ---
 
-## 7. Data Seeding & Fixtures
+## 6. Data Seeding & Fixtures
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 2-3 hours
@@ -457,7 +450,7 @@ class Command(BaseCommand):
 
 ---
 
-## 8. Unit & Integration Tests
+## 7. Unit & Integration Tests
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 4-6 hours
@@ -469,7 +462,7 @@ coverage run manage.py test && coverage report
 
 ---
 
-## 9. Background Tasks with Celery
+## 8. Background Tasks with Celery
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 4-5 hours
@@ -483,7 +476,7 @@ celery -A twinengine_core worker -B -l info
 
 ---
 
-## 10. Email Notifications
+## 9. Email Notifications
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 2-3 hours
@@ -492,7 +485,7 @@ Email alerts for daily reports, low inventory, and long wait times.
 
 ---
 
-## 11. Rate Limiting & Throttling
+## 10. Rate Limiting & Throttling
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 1-2 hours
@@ -508,22 +501,15 @@ REST_FRAMEWORK = {
 
 ---
 
-## 12. Logging & Error Monitoring
+## 11. Deployment Guide
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 2-3 hours
 
-Consider integrating Sentry for production error tracking.
-
----
-
-## 13. Deployment Guide
-
-**Priority:** 🟢 Lower  
-**Estimated Time:** 3-4 hours
-
 ### Render (Backend)
 - Start command: `daphne -b 0.0.0.0 -p $PORT twinengine_core.asgi:application`
+- Build script: `build.sh` (already created)
+- Procfile ready
 
 ### Vercel (Frontend)
 - Configure environment variables for API URL
@@ -538,22 +524,21 @@ Consider integrating Sentry for production error tracking.
 | ✅ | Architecture Setup | High | Done | 4h |
 | ✅ | JWT Authentication | High | Done | 3-4h |
 | ✅ | Table Status Auto-Update | High | Done | 2-3h |
-| ✅ | Admin Panel Customization | 🔴 High | Done | 2-3h |
-| 1 | PostgreSQL/Neon Migration | 🔴 High | Pending | 2-3h |
-| 2 | Environment & CORS Config | 🔴 High | Pending | 1-2h |
-| 3 | Azure GPT-4o Reports | 🟡 Medium | Pending | 4-6h |
-| 4 | Cloudinary Integration | 🟡 Medium | Pending | 2-3h |
-| 5 | Demand Forecasting ML | 🟡 Medium | Pending | 6-8h |
-| 6 | API Documentation | 🟡 Medium | Pending | 2-3h |
-| 7 | Data Seeding & Fixtures | 🟡 Medium | Pending | 2-3h |
-| 8 | Unit & Integration Tests | 🟢 Lower | Pending | 4-6h |
-| 9 | Celery Background Tasks | 🟢 Lower | Pending | 4-5h |
-| 10 | Email Notifications | 🟢 Lower | Pending | 2-3h |
-| 11 | Rate Limiting | 🟢 Lower | Pending | 1-2h |
-| 12 | Logging & Monitoring | 🟢 Lower | Pending | 2-3h |
-| 13 | Deployment Guide | 🟢 Lower | Pending | 3-4h |
+| ✅ | Admin Panel Customization | High | Done | 2-3h |
+| ✅ | Environment & CORS Config | High | Done | 1-2h |
+| 1 | PostgreSQL/Neon Migration | 🔴 High | Deferred | 2-3h |
+| 2 | Azure GPT-4o Reports | 🟡 Medium | Pending | 4-6h |
+| 3 | Cloudinary Integration | 🟡 Medium | Pending | 2-3h |
+| 4 | Demand Forecasting ML | 🟡 Medium | Pending | 6-8h |
+| 5 | API Documentation | 🟡 Medium | Pending | 2-3h |
+| 6 | Data Seeding & Fixtures | 🟡 Medium | Pending | 2-3h |
+| 7 | Unit & Integration Tests | 🟢 Lower | Pending | 4-6h |
+| 8 | Celery Background Tasks | 🟢 Lower | Pending | 4-5h |
+| 9 | Email Notifications | 🟢 Lower | Pending | 2-3h |
+| 10 | Rate Limiting | 🟢 Lower | Pending | 1-2h |
+| 11 | Deployment Guide | 🟢 Lower | Pending | 2-3h |
 
-**Total Estimated Time:** ~41-56 hours remaining (5 completed, 13 pending)
+**Total Estimated Time:** ~32-45 hours remaining (6 completed, 11 pending)
 
 ---
 
@@ -563,11 +548,11 @@ Consider integrating Sentry for production error tracking.
 - [x] JWT Authentication System ✅
 - [x] Table Status Auto-Update Logic ✅
 - [x] Admin Panel Customization ✅
-- [ ] Task 1: PostgreSQL Migration
-- [ ] Task 2: Environment Configuration
-- [ ] Task 7: Seed Sample Data
+- [x] Environment & CORS Configuration ✅
+- [ ] Task 1: PostgreSQL Migration (deferred)
+- [ ] Task 6: Seed Sample Data
 
 ### For production release add:
-- [ ] Task 3: AI Reports
-- [ ] Task 6: API Docs
-- [ ] Task 13: Deployment
+- [ ] Task 2: AI Reports
+- [ ] Task 5: API Docs
+- [ ] Task 11: Deployment
