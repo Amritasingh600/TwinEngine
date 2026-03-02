@@ -1,3 +1,6 @@
+import logging
+from io import BytesIO
+
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -5,13 +8,29 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Avg, Count
 from django.utils import timezone
+from django.conf import settings
 from datetime import datetime, timedelta
+
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.lib.colors import HexColor
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+    HRFlowable, ListFlowable, ListItem,
+)
+
+from apps.cloudinary_service.upload import CloudinaryUploadService
 from .models import DailySummary, PDFReport
 from .serializers import (
     DailySummarySerializer, DailySummaryListSerializer, DailySummaryCreateSerializer,
     PDFReportSerializer, PDFReportListSerializer,
     ReportGenerateSerializer, DailyReportResponseSerializer
 )
+from .services.data_collector import collect_raw_data
+from .services.gpt_report import generate_report_with_gpt, generate_report_fallback
+
+logger = logging.getLogger(__name__)
 
 
 class DailySummaryViewSet(viewsets.ModelViewSet):
@@ -120,100 +139,342 @@ class PDFReportViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def generate(self, request):
         """
-        Generate a new PDF report using GPT-4.
-        This is a placeholder - actual implementation would call Azure OpenAI.
+        Generate Report — Full Pipeline:
+          1. Collect raw operational data from DB
+          2. Send to Azure GPT-4o for formatted analysis
+          3. Build a professional PDF from GPT output
+          4. Upload PDF to Cloudinary
+          5. Save report record and return cloudinary link
         """
         serializer = ReportGenerateSerializer(data=request.data)
-        if serializer.is_valid():
-            from apps.hospitality_group.models import Outlet
-            
-            outlet_id = serializer.validated_data['outlet_id']
-            report_type = serializer.validated_data['report_type']
-            start_date = serializer.validated_data['start_date']
-            end_date = serializer.validated_data['end_date']
-            
-            outlet = Outlet.objects.get(id=outlet_id)
-            
-            # Get daily summaries for the report period
-            summaries = DailySummary.objects.filter(
-                outlet=outlet,
-                date__gte=start_date,
-                date__lte=end_date
-            )
-            
-            # Generate report content (placeholder for GPT-4 integration)
-            gpt_summary, insights, recommendations = self._generate_report_content(
-                outlet, start_date, end_date, summaries
-            )
-            
-            # Create the report
-            report = PDFReport.objects.create(
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.hospitality_group.models import Outlet
+
+        outlet_id = serializer.validated_data['outlet_id']
+        report_type = serializer.validated_data['report_type']
+        start_date = serializer.validated_data['start_date']
+        end_date = serializer.validated_data['end_date']
+
+        outlet = Outlet.objects.get(id=outlet_id)
+
+        # ── Create a PENDING report record so frontend can show progress ──
+        report = PDFReport.objects.create(
+            outlet=outlet,
+            report_type=report_type,
+            start_date=start_date,
+            end_date=end_date,
+            status='GENERATING',
+            generated_by='GPT-4o',
+        )
+
+        try:
+            # ── STEP 1: Collect raw data from all models ──
+            logger.info("Step 1: Collecting raw data for %s (%s -> %s)", outlet.name, start_date, end_date)
+            raw_data = collect_raw_data(outlet, start_date, end_date)
+
+            # ── STEP 2: Send to GPT-4o (or fallback) ──
+            logger.info("Step 2: Sending data to GPT-4o...")
+            gpt_result = None
+            if settings.AZURE_OPENAI_KEY and settings.AZURE_OPENAI_ENDPOINT:
+                try:
+                    gpt_result = generate_report_with_gpt(raw_data)
+                    logger.info("GPT-4o report generated (model: %s)", gpt_result.get('model_used'))
+                except Exception as gpt_err:
+                    logger.warning("GPT-4o failed, falling back to local generator: %s", gpt_err)
+
+            if gpt_result is None:
+                logger.info("Using fallback report generator")
+                gpt_result = generate_report_fallback(raw_data)
+
+            executive_summary = gpt_result['executive_summary']
+            insights = gpt_result['insights']
+            recommendations = gpt_result['recommendations']
+            model_used = gpt_result['model_used']
+
+            # ── STEP 3: Build PDF from GPT output ──
+            logger.info("Step 3: Building PDF...")
+            pdf_bytes = self._build_pdf(
                 outlet=outlet,
                 report_type=report_type,
                 start_date=start_date,
                 end_date=end_date,
-                gpt_summary=gpt_summary,
+                executive_summary=executive_summary,
                 insights=insights,
                 recommendations=recommendations,
-                status='COMPLETED',
-                completed_at=timezone.now()
+                raw_data=raw_data,
             )
-            
-            return Response(PDFReportSerializer(report).data, status=status.HTTP_201_CREATED)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    def _generate_report_content(self, outlet, start_date, end_date, summaries):
-        """
-        Placeholder for GPT-4 report generation.
-        In production, this would call Azure OpenAI API.
-        """
-        total_revenue = sum(s.total_revenue for s in summaries) if summaries else 0
-        total_orders = sum(s.total_orders for s in summaries) if summaries else 0
-        total_guests = sum(s.total_guests for s in summaries) if summaries else 0
-        avg_wait = sum(s.avg_wait_time for s in summaries) / len(summaries) if summaries else 0
-        
-        gpt_summary = f"""
-## Operations Report - {outlet.name}
-### Period: {start_date} to {end_date}
 
-### Key Metrics
-- **Total Revenue:** ₹{total_revenue:,.2f}
-- **Total Orders:** {total_orders:,}
-- **Total Guests:** {total_guests:,}
-- **Average Wait Time:** {avg_wait:.1f} minutes
+            # ── STEP 4: Upload PDF to Cloudinary ──
+            logger.info("Step 4: Uploading PDF to Cloudinary...")
+            cloudinary_url = None
+            filename = (
+                f"{outlet.name.replace(' ', '_')}_{report_type}"
+                f"_{start_date}_{end_date}.pdf"
+            )
+            upload_result = CloudinaryUploadService.upload_bytes(
+                data=pdf_bytes,
+                filename=filename,
+                folder="reports",
+            )
+            if upload_result["success"]:
+                cloudinary_url = upload_result["url"]
+                logger.info("PDF uploaded -> %s", cloudinary_url)
+            else:
+                logger.warning("PDF upload failed: %s", upload_result["error"])
 
-### Performance Overview
-The outlet {'performed well' if avg_wait < 15 else 'experienced some delays'} during this period.
-{'Customer satisfaction likely remained high.' if avg_wait < 12 else 'Consider reviewing kitchen efficiency.'}
+            # ── STEP 5: Update report record ──
+            report.gpt_summary = executive_summary
+            report.insights = insights
+            report.recommendations = recommendations
+            report.cloudinary_url = cloudinary_url
+            report.generated_by = model_used
+            report.status = 'COMPLETED'
+            report.completed_at = timezone.now()
+            report.save()
 
----
-*Report generated by TwinEngine Hospitality AI*
+            logger.info("Report #%d completed -> %s", report.pk, cloudinary_url)
+
+            return Response(
+                PDFReportSerializer(report).data,
+                status=status.HTTP_201_CREATED,
+            )
+
+        except Exception as exc:
+            logger.error("Report generation failed: %s", exc, exc_info=True)
+            report.status = 'FAILED'
+            report.error_message = str(exc)
+            report.save()
+            return Response(
+                {"error": f"Report generation failed: {str(exc)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    # ──────────────────────────────────────────────────────────
+    #  PDF Builder — turns GPT output into a beautiful PDF
+    # ──────────────────────────────────────────────────────────
+
+    def _build_pdf(self, outlet, report_type, start_date, end_date,
+                   executive_summary, insights, recommendations, raw_data):
         """
-        
-        insights = [
-            f"Total revenue for the period: ₹{total_revenue:,.2f}",
-            f"Average orders per day: {total_orders / max(1, (end_date - start_date).days + 1):.0f}",
-            f"Average wait time: {avg_wait:.1f} minutes"
+        Build a professional multi-section PDF and return raw bytes.
+        """
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, pagesize=A4,
+            leftMargin=20 * mm, rightMargin=20 * mm,
+            topMargin=25 * mm, bottomMargin=20 * mm,
+        )
+        styles = getSampleStyleSheet()
+
+        # ── Custom styles ──
+        BRAND_BLUE = HexColor('#2980b9')
+        DARK = HexColor('#2c3e50')
+        LIGHT_BG = HexColor('#ecf0f1')
+        WHITE = HexColor('#ffffff')
+        BORDER_GREY = HexColor('#bdc3c7')
+        RED = HexColor('#e74c3c')
+        GREEN = HexColor('#27ae60')
+
+        title_style = ParagraphStyle(
+            'RTitle', parent=styles['Title'],
+            fontSize=24, textColor=DARK, spaceAfter=4,
+        )
+        subtitle_style = ParagraphStyle(
+            'RSubtitle', parent=styles['Normal'],
+            fontSize=11, textColor=HexColor('#7f8c8d'), spaceAfter=12,
+        )
+        heading_style = ParagraphStyle(
+            'RHeading', parent=styles['Heading2'],
+            fontSize=15, textColor=BRAND_BLUE, spaceBefore=18, spaceAfter=8,
+        )
+        body_style = ParagraphStyle(
+            'RBody', parent=styles['BodyText'],
+            fontSize=10.5, leading=16, spaceAfter=4,
+        )
+        bullet_style = ParagraphStyle(
+            'RBullet', parent=body_style,
+            leftIndent=15, bulletIndent=5, spaceAfter=3,
+        )
+        footer_style = ParagraphStyle(
+            'RFooter', parent=styles['Normal'],
+            fontSize=8, textColor=HexColor('#95a5a6'), alignment=1,
+        )
+
+        elements = []
+
+        # ── Header ──
+        elements.append(Paragraph("TwinEngine Hospitality", title_style))
+        elements.append(Paragraph(
+            f"{report_type} Operations Report &nbsp;|&nbsp; "
+            f"{outlet.name} ({outlet.brand.name}) &nbsp;|&nbsp; "
+            f"{start_date} to {end_date}",
+            subtitle_style,
+        ))
+        elements.append(HRFlowable(
+            width="100%", thickness=1.5, color=BRAND_BLUE,
+            spaceBefore=2, spaceAfter=12,
+        ))
+
+        # ── Key Metrics Table ──
+        order_s = raw_data.get('order_summary', {})
+        payment_s = raw_data.get('payment_summary', {})
+        table_s = raw_data.get('table_overview', {})
+
+        total_rev = order_s.get('total_revenue', 0) or 0
+        total_ord = order_s.get('total_orders', 0) or 0
+        total_gst = order_s.get('total_guests', 0) or 0
+        avg_wait = order_s.get('avg_wait_minutes', 0) or 0
+        avg_ticket = order_s.get('avg_ticket', 0) or 0
+        total_tips = payment_s.get('total_tips', 0) or 0
+
+        elements.append(Paragraph("Key Performance Metrics", heading_style))
+        metrics_data = [
+            ['Total Revenue', f'Rs.{total_rev:,.2f}',   'Total Orders', f'{total_ord:,}'],
+            ['Total Guests',  f'{total_gst:,}',        'Avg Ticket',   f'Rs.{avg_ticket:,.2f}'],
+            ['Avg Wait Time', f'{avg_wait:.1f} min',   'Tips Earned',  f'Rs.{total_tips:,.2f}'],
+            ['Tables',        f'{table_s.get("total_tables", "-")}',
+             'Capacity',      f'{table_s.get("total_capacity", "-")} seats'],
         ]
-        
-        recommendations = []
-        if avg_wait > 15:
-            recommendations.append("Consider adding staff during peak hours to reduce wait times")
-        if total_orders > 0:
-            recommendations.append("Maintain current inventory levels based on order volume")
-        recommendations.append("Review top-selling items to optimize menu placement")
-        
-        return gpt_summary, insights, recommendations
+        t = Table(metrics_data, colWidths=[110, 110, 110, 110])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), LIGHT_BG),
+            ('BACKGROUND', (2, 0), (2, -1), LIGHT_BG),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+            ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+            ('ALIGN', (3, 0), (3, -1), 'RIGHT'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 0.5, BORDER_GREY),
+            ('TOPPADDING', (0, 0), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 6 * mm))
+
+        # ── Order Status Breakdown ──
+        status_bd = order_s.get('status_breakdown', {})
+        if status_bd:
+            elements.append(Paragraph("Order Status Breakdown", heading_style))
+            status_rows = [['Status', 'Count']]
+            status_colors = {
+                'COMPLETED': GREEN, 'SERVED': GREEN,
+                'CANCELLED': RED,
+                'PLACED': HexColor('#f39c12'), 'PREPARING': HexColor('#f39c12'),
+            }
+            for st, cnt in status_bd.items():
+                status_rows.append([st, str(cnt)])
+            st_table = Table(status_rows, colWidths=[200, 100])
+            st_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+                ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ALIGN', (1, 0), (1, -1), 'CENTER'),
+                ('GRID', (0, 0), (-1, -1), 0.5, BORDER_GREY),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, LIGHT_BG]),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ]))
+            elements.append(st_table)
+            elements.append(Spacer(1, 6 * mm))
+
+        # ── Payment Methods ──
+        pay_methods = payment_s.get('methods_breakdown', {})
+        if pay_methods:
+            elements.append(Paragraph("Payment Methods", heading_style))
+            pay_rows = [['Method', 'Transactions']]
+            for method, cnt in pay_methods.items():
+                pay_rows.append([method, str(cnt)])
+            pay_table = Table(pay_rows, colWidths=[200, 100])
+            pay_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), BRAND_BLUE),
+                ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('ALIGN', (1, 0), (1, -1), 'CENTER'),
+                ('GRID', (0, 0), (-1, -1), 0.5, BORDER_GREY),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, LIGHT_BG]),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ]))
+            elements.append(pay_table)
+            elements.append(Spacer(1, 6 * mm))
+
+        # ── Low Stock Alerts ──
+        inv = raw_data.get('inventory_summary', {})
+        low_items = inv.get('low_stock_items', [])
+        if low_items:
+            elements.append(Paragraph("[!] Low Stock Alerts", heading_style))
+            inv_rows = [['Item', 'Category', 'Current Qty', 'Reorder At']]
+            for item in low_items[:10]:
+                inv_rows.append([
+                    item['name'], item['category'],
+                    f"{item['current_quantity']} {item.get('unit', '')}",
+                    f"{item['reorder_threshold']} {item.get('unit', '')}",
+                ])
+            inv_table = Table(inv_rows, colWidths=[120, 90, 100, 100])
+            inv_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), RED),
+                ('TEXTCOLOR', (0, 0), (-1, 0), WHITE),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 0.5, BORDER_GREY),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, HexColor('#fdf2f2')]),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ]))
+            elements.append(inv_table)
+            elements.append(Spacer(1, 6 * mm))
+
+        # ── Executive Summary (from GPT-4o) ──
+        elements.append(HRFlowable(
+            width="100%", thickness=0.5, color=BORDER_GREY,
+            spaceBefore=6, spaceAfter=6,
+        ))
+        elements.append(Paragraph("Executive Summary", heading_style))
+        for para in executive_summary.strip().split('\n\n'):
+            clean = para.strip()
+            if clean:
+                elements.append(Paragraph(clean, body_style))
+                elements.append(Spacer(1, 2 * mm))
+
+        # ── AI Insights ──
+        elements.append(Paragraph("AI-Generated Insights", heading_style))
+        for idx, insight in enumerate(insights, 1):
+            elements.append(Paragraph(
+                f"<b>{idx}.</b> {insight}", bullet_style
+            ))
+
+        # ── Recommendations ──
+        elements.append(Paragraph("Recommendations", heading_style))
+        for idx, rec in enumerate(recommendations, 1):
+            elements.append(Paragraph(
+                f"<b>{idx}.</b> {rec}", bullet_style
+            ))
+
+        # ── Footer ──
+        elements.append(Spacer(1, 12 * mm))
+        elements.append(HRFlowable(
+            width="100%", thickness=0.5, color=BORDER_GREY,
+            spaceBefore=4, spaceAfter=4,
+        ))
+        elements.append(Paragraph(
+            f"Generated by TwinEngine Hospitality AI &nbsp;|&nbsp; "
+            f"{timezone.now().strftime('%d %b %Y, %I:%M %p')} &nbsp;|&nbsp; "
+            f"Powered by Azure GPT-4o",
+            footer_style,
+        ))
+
+        doc.build(elements)
+        return buffer.getvalue()
 
 
 class DailyReportView(APIView):
     """
     API endpoint to retrieve AI-generated operational summary.
     
-    GET /api/reports/daily/
-    Query params: date (YYYY-MM-DD), outlet (optional)
-    Response: { report_text: string, insights: [], recommendations: [] }
+    GET /api/reports/daily/?date=YYYY-MM-DD&outlet=<id>
+    Response: { report_text, insights, recommendations, cloudinary_url }
     """
     
     def get(self, request):
@@ -231,7 +492,7 @@ class DailyReportView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Try to find existing report
+        # Try to find existing completed report
         qs = PDFReport.objects.filter(
             start_date__lte=report_date,
             end_date__gte=report_date,
@@ -240,18 +501,32 @@ class DailyReportView(APIView):
         if outlet_id:
             qs = qs.filter(outlet_id=outlet_id)
         
-        report = qs.first()
+        report = qs.order_by('-completed_at').first()
         
         if report:
             return Response({
+                'report_id': report.pk,
                 'report_text': report.gpt_summary,
                 'insights': report.insights,
                 'recommendations': report.recommendations,
                 'generated_at': report.completed_at,
-                'cloudinary_url': report.cloudinary_url or None
+                'generated_by': report.generated_by,
+                'cloudinary_url': report.cloudinary_url or None,
             })
         else:
             return Response(
-                {'error': f'No report found for date {report_date}'},
+                {
+                    'error': f'No report found for date {report_date}. '
+                             f'Use POST /api/reports/generate/ to create one.',
+                    'hint': {
+                        'url': '/api/reports/generate/',
+                        'method': 'POST',
+                        'body': {
+                            'outlet_id': int(outlet_id) if outlet_id else '<outlet_id>',
+                            'report_type': 'DAILY',
+                            'start_date': str(report_date),
+                        }
+                    }
+                },
                 status=status.HTTP_404_NOT_FOUND
             )

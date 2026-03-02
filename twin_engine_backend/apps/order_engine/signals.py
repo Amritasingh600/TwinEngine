@@ -241,7 +241,7 @@ def update_table_status_on_order_change(sender, instance, created, **kwargs):
                 new_status=instance.status,
                 table_id=table.id
             )
-            logger.info(f"Order #{instance.pk} status: {old_order_status} → {instance.status}")
+            logger.info(f"Order #{instance.pk} status: {old_order_status} -> {instance.status}")
             
             # Special broadcast for completed orders
             if instance.status == 'COMPLETED':
@@ -251,7 +251,7 @@ def update_table_status_on_order_change(sender, instance, created, **kwargs):
                     table_id=table.id,
                     total=float(instance.total)
                 )
-                logger.info(f"Order #{instance.pk} completed - Total: ₹{instance.total}")
+                logger.info(f"Order #{instance.pk} completed - Total: Rs.{instance.total}")
                 
     except Exception as e:
         logger.warning(f"Order broadcast failed: {e}")

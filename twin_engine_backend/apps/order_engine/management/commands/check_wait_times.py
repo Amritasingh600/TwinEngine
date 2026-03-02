@@ -110,18 +110,18 @@ class Command(BaseCommand):
             max_wait = table_data['max_wait']
             order_count = len(table_data['orders'])
             
-            status_indicator = '🔴' if table.current_status == 'RED' else '⚠️'
+            status_indicator = '[!]' if table.current_status == 'RED' else '[?]'
             self.stdout.write(
                 f'  {status_indicator} {table.name} ({table.outlet.name})'
             )
             self.stdout.write(
-                f'     └─ {order_count} order(s) waiting {max_wait} minutes'
+                f'     -- {order_count} order(s) waiting {max_wait} minutes'
             )
             
             if table.current_status == 'RED':
                 already_red_count += 1
                 self.stdout.write(
-                    self.style.WARNING('     └─ Already marked RED')
+                    self.style.WARNING('     -- Already marked RED')
                 )
             else:
                 old_status = table.current_status
@@ -152,7 +152,7 @@ class Command(BaseCommand):
                 
                 updated_count += 1
                 self.stdout.write(
-                    self.style.SUCCESS(f'     └─ Marked RED ({old_status} → RED)')
+                    self.style.SUCCESS(f'     -- Marked RED ({old_status} -> RED)')
                 )
             
             self.stdout.write('')  # Empty line for readability
@@ -166,7 +166,7 @@ class Command(BaseCommand):
         
         if dry_run and updated_count > 0:
             self.stdout.write(
-                self.style.WARNING(f'\n  ⚠️  Run without --dry-run to apply changes')
+                self.style.WARNING(f'\n  [!] Run without --dry-run to apply changes')
             )
         
         self.stdout.write(self.style.SUCCESS(f'{"="*60}\n'))

@@ -53,6 +53,10 @@ def api_root(request):
             'summaries': '/api/summaries/',
             'reports': '/api/reports/',
             'daily-report': '/api/reports/daily/',
+            # File uploads (Cloudinary)
+            'upload': '/api/upload/',
+            'upload-multi': '/api/upload/multi/',
+            'upload-delete': '/api/upload/delete/',
         }
     })
 
@@ -72,4 +76,5 @@ urlpatterns = [
     path('api/', include('apps.order_engine.urls')),
     path('api/', include('apps.predictive_core.urls')),
     path('api/', include('apps.insights_hub.urls')),
+    path('api/', include('apps.cloudinary_service.urls')),
 ]

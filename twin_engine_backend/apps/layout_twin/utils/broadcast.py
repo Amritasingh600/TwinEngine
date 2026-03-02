@@ -64,7 +64,7 @@ def broadcast_node_status_change(outlet_id: int, node_id: int, old_status: str, 
                 'timestamp': datetime.now().isoformat(),
             }
         )
-        logger.debug(f"Broadcast: Node {node_id} changed {old_status} → {new_status}")
+        logger.debug(f"Broadcast: Node {node_id} changed {old_status} -> {new_status}")
     except Exception as e:
         logger.warning(f"Node status broadcast failed: {e}")
 

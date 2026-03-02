@@ -236,6 +236,115 @@ This document outlines all remaining backend tasks with detailed implementation 
 
 ---
 
+### 7. Cloudinary Media Integration - COMPLETED
+
+**Completed On:** March 2, 2026
+
+#### What Was Implemented:
+- Dedicated `apps/cloudinary_service/` module with upload service, serializers, views, and URL routing
+- `CloudinaryUploadService` class with `upload_file()`, `upload_bytes()`, `delete_file()` methods
+- Root folder organization: all uploads stored under `twinengine/` on Cloudinary CDN
+- 3 REST API endpoints (all require JWT authentication):
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/upload/` | POST | Single file upload (max 10 MB) |
+| `/api/upload/multi/` | POST | Multi-file upload (max 10 files) |
+| `/api/upload/delete/` | DELETE | Delete file by public_id |
+
+- Serializer validation: file size (10 MB limit), file count (10 max), optional folder/tags
+- Cloudinary config added to `settings.py` via environment variables
+
+#### Files Created:
+- `apps/cloudinary_service/__init__.py`
+- `apps/cloudinary_service/upload.py` - CloudinaryUploadService class
+- `apps/cloudinary_service/serializers.py` - File validation serializers
+- `apps/cloudinary_service/views.py` - Upload/Delete API views
+- `apps/cloudinary_service/urls.py` - URL routing
+
+#### Files Modified:
+- `twinengine_core/settings.py` - Cloudinary configuration
+- `twinengine_core/urls.py` - Cloudinary URL routes
+
+---
+
+### 8. Azure GPT-4o Report Generation Pipeline - COMPLETED
+
+**Completed On:** March 2, 2026
+
+#### What Was Implemented:
+- Complete 5-step AI report generation pipeline:
+  1. **Collect raw data** from all models (orders, payments, inventory, staff, sales)
+  2. **Send to Azure GPT-4o** for AI analysis (with automatic local fallback)
+  3. **Build professional PDF** using ReportLab
+  4. **Upload PDF to Cloudinary** storage
+  5. **Return Cloudinary URL** to the client
+
+- Data collection service (`data_collector.py`):
+  - Aggregates order_summary, payment_summary, table_overview, inventory_summary, staff_summary
+  - Uses Django ORM aggregations (Sum, Avg, Count)
+
+- GPT-4o integration (`gpt_report.py`):
+  - Azure OpenAI GPT-4o API call with structured prompt
+  - Automatic fallback to local analysis if GPT-4o unavailable
+  - Returns: executive_summary, insights[], recommendations[], model_used
+
+- PDF generation (ReportLab):
+  - Professional layout with header, key metrics table, order/payment breakdowns
+  - Low stock alerts, executive summary, numbered insights & recommendations
+
+- Report API endpoint:
+  | Endpoint | Method | Purpose |
+  |----------|--------|---------|
+  | `/api/reports/generate/` | POST | Generate AI PDF report |
+  - Request: `{"outlet_id": 4, "report_type": "DAILY", "start_date": "2026-03-02"}`
+  - Response: `{cloudinary_url, gpt_summary, insights[], recommendations[], generated_by}`
+
+#### Files Created:
+- `apps/insights_hub/services/__init__.py`
+- `apps/insights_hub/services/data_collector.py` - Raw data collection from all models
+- `apps/insights_hub/services/gpt_report.py` - Azure GPT-4o integration + fallback
+
+#### Files Modified:
+- `apps/insights_hub/views.py` - Complete rewrite with 5-step pipeline
+- `apps/insights_hub/serializers.py` - Added ReportGenerateSerializer
+- `apps/insights_hub/urls.py` - Added generate endpoint
+- `twinengine_core/settings.py` - Azure OpenAI configuration
+
+---
+
+### 9. Synthetic Data Generator - COMPLETED
+
+**Completed On:** March 2, 2026
+
+#### What Was Implemented:
+- Comprehensive synthetic data generator covering every restaurant scenario
+- Management command: `python manage.py generate_synthetic_data`
+- Options: `--clear` flag to wipe and regenerate all data
+
+#### Data Generated:
+| Category | Count | Details |
+|----------|-------|---------|
+| Brand | 1 | "Spice Republic Hospitality Group" |
+| Outlet | 1 | 72-seat restaurant in Koramangala |
+| Staff | 9 | Manager, 3 Waiters, 2 Chefs, Host, Bartender, Dishwasher |
+| Tables | 15 | 5 statuses: BLUE, GREEN, YELLOW, RED, GREY |
+| Special Nodes | 5 | Kitchen, Bar, Entrance, Cash Counter, Restroom |
+| Orders | 50 | Full lifecycle: COMPLETED(22), SERVED(8), PREPARING(5), READY(4), PLACED(5), CANCELLED(6) |
+| Payments | 31 | CASH, CARD, UPI, WALLET, SPLIT + 1 FAILED |
+| Inventory | 20 | 5 low stock + 5 near-expiry alerts |
+| Staff Schedules | 29 | 4 days across MORNING/AFTERNOON/NIGHT shifts |
+| Sales Data | 91 | 7 days of hourly sales records |
+| Daily Summary | 1 | Revenue, orders, guests, tips, delayed count |
+
+- Test user created: `synth_mgr_1` / `synth123` (Manager role)
+- Uses `get_or_create` for Brand/Outlet (safe to re-run)
+
+#### Files Created:
+- `apps/insights_hub/management/commands/generate_synthetic_data.py`
+
+---
+
 ## Remaining Tasks
 
 ## Task Summary
@@ -244,12 +353,12 @@ This document outlines all remaining backend tasks with detailed implementation 
 |----------|------|--------|-----------|
 | 🔴 High | Admin Panel Customization | ✅ COMPLETED | - |
 | 🔴 High | PostgreSQL/Neon Migration | ⏳ Pending | 2-3 hours |
-| 🔴 High | Environment & CORS Configuration | ⏳ Pending | 1-2 hours |
-| 🟠 Medium | Azure GPT-4o Report Generation | ⏳ Pending | 4-6 hours |
-| 🟠 Medium | Cloudinary Media Integration | ⏳ Pending | 2-3 hours |
+| 🔴 High | Environment & CORS Configuration | ✅ COMPLETED | - |
+| 🟠 Medium | Azure GPT-4o Report Generation | ✅ COMPLETED | - |
+| 🟠 Medium | Cloudinary Media Integration | ✅ COMPLETED | - |
 | 🟠 Medium | Demand Forecasting ML | ⏳ Pending | 6-8 hours |
 | 🟠 Medium | API Documentation (Swagger) | ⏳ Pending | 3-4 hours |
-| 🟠 Medium | Data Seeding & Fixtures | ⏳ Pending | 2-3 hours |
+| 🟠 Medium | Data Seeding & Fixtures | ✅ COMPLETED | - |
 | 🟢 Low | Unit & Integration Tests | ⏳ Pending | 8-10 hours |
 | 🟢 Low | Background Tasks (Celery) | ⏳ Pending | 4-5 hours |
 | 🟢 Low | Email Notifications | ⏳ Pending | 2-3 hours |
@@ -257,30 +366,25 @@ This document outlines all remaining backend tasks with detailed implementation 
 | 🟢 Low | Logging & Error Monitoring | ⏳ Pending | 3-4 hours |
 | 🟢 Low | Deployment Guide | ⏳ Pending | 2-3 hours |
 
-**Total Remaining:** 13 tasks | **Est. Time:** 41-56 hours
+**Total Remaining:** 8 tasks | **Est. Time:** 31-43 hours
 
 ---
 
 ## Table of Contents
 
 ### High Priority (Must Have)
-1. [PostgreSQL/Neon Migration](#1-postgresqlneon-migration)
-2. [Environment & CORS Configuration](#2-environment--cors-configuration)
+1. [PostgreSQL/Neon Migration](#1-postgresqlneon-migration) - Deferred
 
 ### Medium Priority (Should Have)
-3. [Azure GPT-4o Report Generation](#3-azure-gpt-4o-report-generation)
-4. [Cloudinary Media Integration](#4-cloudinary-media-integration)
-5. [Demand Forecasting ML](#5-demand-forecasting-ml)
-6. [API Documentation (Swagger)](#6-api-documentation-swagger)
-7. [Data Seeding & Fixtures](#7-data-seeding--fixtures)
+2. [Demand Forecasting ML](#2-demand-forecasting-ml)
+3. [API Documentation (Swagger)](#3-api-documentation-swagger)
 
 ### Lower Priority (Nice to Have)
-8. [Unit & Integration Tests](#8-unit--integration-tests)
-9. [Background Tasks with Celery](#9-background-tasks-with-celery)
-10. [Email Notifications](#10-email-notifications)
-11. [Rate Limiting & Throttling](#11-rate-limiting--throttling)
-12. [Logging & Error Monitoring](#12-logging--error-monitoring)
-13. [Deployment Guide](#13-deployment-guide)
+4. [Unit & Integration Tests](#4-unit--integration-tests)
+5. [Background Tasks with Celery](#5-background-tasks-with-celery)
+6. [Email Notifications](#6-email-notifications)
+7. [Rate Limiting & Throttling](#7-rate-limiting--throttling)
+8. [Deployment Guide](#8-deployment-guide)
 
 ---
 
@@ -319,35 +423,7 @@ python manage.py import_data pre_migration_backup.json
 
 ---
 
-## 2. Azure GPT-4o Report Generation
-
-**Priority:** 🟡 Medium  
-**Estimated Time:** 4-6 hours  
-**Dependencies:** `openai`
-
-### Purpose
-Generate AI-powered operational reports:
-- Daily shift summaries
-- Weekly performance analytics
-- Custom date range reports
-
-### Implementation
-Create `apps/insights_hub/services/report_service.py` with Azure OpenAI integration.
-
----
-
-## 3. Cloudinary Media Integration
-
-**Priority:** 🟡 Medium  
-**Estimated Time:** 2-3 hours  
-**Dependencies:** `cloudinary`
-
-### Purpose
-Store and serve PDF reports and media via Cloudinary CDN.
-
----
-
-## 4. Demand Forecasting ML
+## 2. Demand Forecasting ML
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 6-8 hours  
@@ -361,7 +437,7 @@ ML predictions for:
 
 ---
 
-## 5. API Documentation (Swagger)
+## 3. API Documentation (Swagger)
 
 **Priority:** 🟡 Medium  
 **Estimated Time:** 2-3 hours  
@@ -384,73 +460,11 @@ urlpatterns = [
 
 ---
 
-## 6. Data Seeding & Fixtures
-
-**Priority:** 🟡 Medium  
-**Estimated Time:** 2-3 hours
-
-### Purpose
-Create sample data for development and testing.
-
-### Implementation
-Create management command `apps/hospitality_group/management/commands/seed_data.py`:
-
-```python
-from django.core.management.base import BaseCommand
-
-class Command(BaseCommand):
-    help = 'Seed database with sample hospitality data'
-    
-    def handle(self, *args, **options):
-        from apps.hospitality_group.models import Brand, Outlet
-        from apps.layout_twin.models import ServiceNode
-        
-        # Create sample brand
-        brand, _ = Brand.objects.get_or_create(
-            corporate_id='DEMO001',
-            defaults={
-                'name': 'Demo Restaurant Group',
-                'contact_email': 'demo@example.com',
-                'subscription_tier': 'GROWTH'
-            }
-        )
-        
-        # Create sample outlet with tables
-        outlet, _ = Outlet.objects.get_or_create(
-            brand=brand,
-            name='Downtown Cafe',
-            defaults={
-                'address': '123 Main Street',
-                'city': 'Mumbai',
-                'manager_name': 'John Manager',
-                'manager_phone': '9876543210',
-                'seating_capacity': 50
-            }
-        )
-        
-        for i in range(1, 11):
-            ServiceNode.objects.get_or_create(
-                outlet=outlet,
-                name=f'Table {i}',
-                defaults={
-                    'node_type': 'TABLE',
-                    'pos_x': (i % 5) * 2.0,
-                    'pos_z': (i // 5) * 2.0,
-                    'capacity': 4,
-                    'current_status': 'BLUE'
-                }
-            )
-        
-        self.stdout.write(self.style.SUCCESS('Sample data created!'))
-```
-
----
-
 ## LOWER PRIORITY TASKS
 
 ---
 
-## 7. Unit & Integration Tests
+## 4. Unit & Integration Tests
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 4-6 hours
@@ -462,7 +476,7 @@ coverage run manage.py test && coverage report
 
 ---
 
-## 8. Background Tasks with Celery
+## 5. Background Tasks with Celery
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 4-5 hours
@@ -476,7 +490,7 @@ celery -A twinengine_core worker -B -l info
 
 ---
 
-## 9. Email Notifications
+## 6. Email Notifications
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 2-3 hours
@@ -485,7 +499,7 @@ Email alerts for daily reports, low inventory, and long wait times.
 
 ---
 
-## 10. Rate Limiting & Throttling
+## 7. Rate Limiting & Throttling
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 1-2 hours
@@ -501,7 +515,7 @@ REST_FRAMEWORK = {
 
 ---
 
-## 11. Deployment Guide
+## 8. Deployment Guide
 
 **Priority:** 🟢 Lower  
 **Estimated Time:** 2-3 hours
@@ -526,19 +540,19 @@ REST_FRAMEWORK = {
 | ✅ | Table Status Auto-Update | High | Done | 2-3h |
 | ✅ | Admin Panel Customization | High | Done | 2-3h |
 | ✅ | Environment & CORS Config | High | Done | 1-2h |
+| ✅ | Cloudinary Media Integration | Medium | Done | 2-3h |
+| ✅ | Azure GPT-4o Report Pipeline | Medium | Done | 4-6h |
+| ✅ | Synthetic Data Generator | Medium | Done | 2-3h |
 | 1 | PostgreSQL/Neon Migration | 🔴 High | Deferred | 2-3h |
-| 2 | Azure GPT-4o Reports | 🟡 Medium | Pending | 4-6h |
-| 3 | Cloudinary Integration | 🟡 Medium | Pending | 2-3h |
-| 4 | Demand Forecasting ML | 🟡 Medium | Pending | 6-8h |
-| 5 | API Documentation | 🟡 Medium | Pending | 2-3h |
-| 6 | Data Seeding & Fixtures | 🟡 Medium | Pending | 2-3h |
-| 7 | Unit & Integration Tests | 🟢 Lower | Pending | 4-6h |
-| 8 | Celery Background Tasks | 🟢 Lower | Pending | 4-5h |
-| 9 | Email Notifications | 🟢 Lower | Pending | 2-3h |
-| 10 | Rate Limiting | 🟢 Lower | Pending | 1-2h |
-| 11 | Deployment Guide | 🟢 Lower | Pending | 2-3h |
+| 2 | Demand Forecasting ML | 🟡 Medium | Pending | 6-8h |
+| 3 | API Documentation | 🟡 Medium | Pending | 2-3h |
+| 4 | Unit & Integration Tests | 🟢 Lower | Pending | 4-6h |
+| 5 | Celery Background Tasks | 🟢 Lower | Pending | 4-5h |
+| 6 | Email Notifications | 🟢 Lower | Pending | 2-3h |
+| 7 | Rate Limiting | 🟢 Lower | Pending | 1-2h |
+| 8 | Deployment Guide | 🟢 Lower | Pending | 2-3h |
 
-**Total Estimated Time:** ~32-45 hours remaining (6 completed, 11 pending)
+**Total Estimated Time:** ~25-33 hours remaining (9 completed, 8 pending)
 
 ---
 
@@ -549,10 +563,11 @@ REST_FRAMEWORK = {
 - [x] Table Status Auto-Update Logic ✅
 - [x] Admin Panel Customization ✅
 - [x] Environment & CORS Configuration ✅
+- [x] Cloudinary Media Integration ✅
+- [x] Azure GPT-4o Report Pipeline ✅
+- [x] Synthetic Data Generator ✅
 - [ ] Task 1: PostgreSQL Migration (deferred)
-- [ ] Task 6: Seed Sample Data
 
 ### For production release add:
-- [ ] Task 2: AI Reports
-- [ ] Task 5: API Docs
-- [ ] Task 11: Deployment
+- [ ] Task 3: API Docs (Swagger)
+- [ ] Task 8: Deployment Guide

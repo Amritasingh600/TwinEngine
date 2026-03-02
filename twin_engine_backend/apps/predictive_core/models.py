@@ -41,7 +41,7 @@ class SalesData(models.Model):
         ]
     
     def __str__(self):
-        return f"{self.outlet.name} - {self.date} {self.hour}:00 - ₹{self.total_revenue}"
+        return f"{self.outlet.name} - {self.date} {self.hour}:00 - Rs.{self.total_revenue}"
 
 
 class InventoryItem(models.Model):
@@ -101,7 +101,7 @@ class InventoryItem(models.Model):
         return self.current_quantity <= self.reorder_threshold
     
     def __str__(self):
-        status = "⚠️ LOW" if self.is_low_stock else "✓"
+        status = "LOW" if self.is_low_stock else "OK"
         return f"{self.name} ({self.current_quantity} {self.unit}) {status}"
 
 

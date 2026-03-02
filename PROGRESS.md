@@ -156,3 +156,238 @@
     - Test multiple orders on same table
     - Test status transition validation
     - Test wait time management command
+
+- **2 Mar 2026** → **Cloudinary Media Integration - COMPLETED ✅**
+  - Created dedicated `apps/cloudinary_service/` module
+  - Implemented `CloudinaryUploadService` class:
+    - `upload_file(file, folder)` - Upload Django UploadedFile objects
+    - `upload_bytes(content, filename, folder)` - Upload raw bytes (PDFs, images)
+    - `delete_file(public_id)` - Delete files from Cloudinary
+    - Root folder: `twinengine/` (all uploads organized under this)
+  - Created 3 REST API endpoints (all require JWT authentication):
+    - `POST /api/upload/` - Single file upload (max 10 MB)
+    - `POST /api/upload/multi/` - Multi-file upload (max 10 files)
+    - `DELETE /api/upload/delete/` - Delete file by public_id
+  - Created serializers with validation:
+    - `FileUploadSerializer` - 10 MB file size limit, optional folder/tags
+    - `MultiFileUploadSerializer` - Max 10 files per request
+    - `FileDeleteSerializer` - Validates public_id
+  - Configured Cloudinary in `settings.py`:
+    - `cloud_name`, `api_key`, `api_secret` from environment variables
+  - Files created:
+    - `apps/cloudinary_service/__init__.py`
+    - `apps/cloudinary_service/upload.py`
+    - `apps/cloudinary_service/serializers.py`
+    - `apps/cloudinary_service/views.py`
+    - `apps/cloudinary_service/urls.py`
+  - Files modified:
+    - `twinengine_core/settings.py` - Added Cloudinary config
+    - `twinengine_core/urls.py` - Added Cloudinary URL routes
+
+- **2 Mar 2026** → **Azure GPT-4o Report Generation Pipeline - COMPLETED ✅**
+  - Built complete 5-step AI report generation pipeline:
+    1. **Collect raw data** from all models (orders, payments, inventory, staff, sales)
+    2. **Send to Azure GPT-4o** for AI analysis (with local fallback)
+    3. **Build professional PDF** using ReportLab
+    4. **Upload PDF to Cloudinary** storage
+    5. **Return Cloudinary URL** to the client
+  - Created `apps/insights_hub/services/data_collector.py`:
+    - `collect_raw_data(outlet, start_date, end_date)` function
+    - Aggregates: order_summary, payment_summary, table_overview, inventory_summary, staff_summary, existing_daily_summaries
+    - Uses Django ORM aggregations (Sum, Avg, Count)
+  - Created `apps/insights_hub/services/gpt_report.py`:
+    - `generate_report_with_gpt(raw_data)` - Azure OpenAI GPT-4o integration
+    - `generate_report_fallback(raw_data)` - Local fallback when GPT-4o unavailable
+    - Returns: executive_summary, insights[], recommendations[], model_used
+  - Completely rewrote `apps/insights_hub/views.py`:
+    - `PDFReportViewSet.generate()` - Main pipeline endpoint
+    - `_build_pdf()` - Professional PDF with:
+      - Header with outlet name and date range
+      - Key Metrics table (revenue, orders, avg ticket, guests, avg wait time)
+      - Order breakdown by status (pie-chart-style table)
+      - Payment breakdown by method and status
+      - Low stock alerts (highlighted items below reorder threshold)
+      - Executive Summary section (from GPT-4o)
+      - Numbered Insights and Recommendations
+    - Automatic `DailySummary` creation from collected data
+    - `PDFReport` record saved with Cloudinary URL
+  - Updated `apps/insights_hub/serializers.py`:
+    - `ReportGenerateSerializer` - Validates outlet_id, start_date, optional end_date, report_type
+  - Azure OpenAI Configuration in `settings.py`:
+    - `AZURE_OPENAI_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`
+  - Report API endpoint:
+    - `POST /api/reports/generate/` - Generate and return PDF report
+    - Request body: `{"outlet_id": 4, "report_type": "DAILY", "start_date": "2026-03-02"}`
+    - Response includes: `cloudinary_url`, `gpt_summary`, `insights[]`, `recommendations[]`, `generated_by`
+
+- **2 Mar 2026** → **Synthetic Data Generator - COMPLETED ✅**
+  - Created `apps/insights_hub/management/commands/generate_synthetic_data.py`
+  - Comprehensive data covering every restaurant scenario:
+    - 1 Brand ("Spice Republic Hospitality Group") + 1 Outlet (72 seats)
+    - 9 Staff (Manager, 3 Waiters, 2 Chefs, 1 Host, 1 Bartender, 1 Dishwasher)
+    - 15 Tables with 5 different statuses (BLUE/GREEN/YELLOW/RED/GREY)
+    - 5 Special nodes (Kitchen, Bar, Entrance, Cash Counter, Restroom)
+    - 50 Orders with realistic distribution:
+      - COMPLETED (22), SERVED (8), PREPARING (5), READY (4), PLACED (5), CANCELLED (6)
+      - Full lifecycle simulation (PLACED → PREPARING → READY → SERVED → COMPLETED)
+      - Cancellation reasons: "Customer left", "Long wait time", "Incorrect order", etc.
+    - 31 Payment records (CASH/CARD/UPI/WALLET/SPLIT, including 1 FAILED)
+    - 20 Inventory items (5 low stock, 5 near-expiry alerts)
+    - 29 Staff schedules across 4 days (MORNING/AFTERNOON/NIGHT shifts)
+    - 91 Hourly sales records (7 days of historical data)
+    - 1 Daily summary (revenue, orders, guests, tips, delayed count)
+  - Options: `--clear` flag to wipe and regenerate all data
+  - Uses `get_or_create` for Brand/Outlet (safe to re-run)
+  - Creates test user: `synth_mgr_1` / `synth123` (Manager role)
+  - Command: `python manage.py generate_synthetic_data`
+
+- **2 Mar 2026** → **End-to-End Pipeline Testing - VERIFIED ✅**
+  - Full pipeline tested successfully:
+    - Login → `POST /api/auth/token/` → 200 OK (JWT token)
+    - Report Generation → `POST /api/reports/generate/` → 200 OK
+    - GPT-4o analysis completed (model: `gpt-4o-2024-11-20`)
+    - PDF uploaded to Cloudinary successfully
+    - Response includes: Cloudinary URL, executive summary, 8 insights, 6 recommendations
+  - Test results with synthetic data:
+    - Revenue: Rs.47,575.50 across 50 orders
+    - 153 guests served, avg ticket Rs.951.51
+    - GPT-4o identified: peak hours (8-10 PM), 5 low-stock items, 6 cancellations
+    - Actionable recommendations generated (staffing, inventory reorder, order tracking)
+
+---
+
+## Testing Guide: Report Generation & Cloudinary Pipeline
+
+### Prerequisites
+- Django dev server running: `python manage.py runserver`
+- Synthetic data loaded: `python manage.py generate_synthetic_data`
+- Virtual environment activated
+
+### Step 1: Login & Obtain JWT Token
+
+```bash
+# Using curl
+curl -X POST http://127.0.0.1:8000/api/auth/token/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "synth_mgr_1", "password": "synth123"}'
+
+# Using PowerShell
+$body = '{"username":"synth_mgr_1","password":"synth123"}'
+$resp = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/auth/token/" -Method POST -ContentType "application/json" -Body $body
+$token = $resp.access
+Write-Host "Token: $($token.Substring(0,50))..."
+```
+
+**Expected Response (200 OK):**
+```json
+{
+  "access": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+### Step 2: Generate Report (Main Pipeline)
+
+```bash
+# Using curl
+curl -X POST http://127.0.0.1:8000/api/reports/generate/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -d '{"outlet_id": 4, "report_type": "DAILY", "start_date": "2026-03-02"}'
+
+# Using PowerShell
+$headers = @{Authorization = "Bearer $token"; "Content-Type" = "application/json"}
+$body = '{"outlet_id": 4, "report_type": "DAILY", "start_date": "2026-03-02"}'
+$report = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/reports/generate/" -Method POST -Headers $headers -Body $body
+$report | ConvertTo-Json -Depth 5
+```
+
+**Expected Response (200 OK):**
+```json
+{
+  "id": 1,
+  "outlet": 4,
+  "outlet_name": "Spice Republic Koramangala",
+  "report_type": "DAILY",
+  "start_date": "2026-03-02",
+  "end_date": "2026-03-02",
+  "cloudinary_url": "https://res.cloudinary.com/dfhl1aopy/raw/upload/.../report.pdf",
+  "gpt_summary": "The operations at Spice Republic Koramangala...",
+  "insights": ["Revenue was Rs.47,575.50...", "..."],
+  "recommendations": ["Increase kitchen staff during peak hours...", "..."],
+  "status": "COMPLETED",
+  "error_message": null,
+  "generated_by": "gpt-4o-2024-11-20",
+  "created_at": "2026-03-02T...",
+  "completed_at": "2026-03-02T..."
+}
+```
+
+### Step 3: Download and Verify PDF
+
+Open the `cloudinary_url` from the response in your browser. The PDF should contain:
+- **Header**: Outlet name, report type, date range
+- **Key Metrics Table**: Total Revenue, Total Orders, Avg Ticket Size, Total Guests, Avg Wait Time
+- **Order Breakdown**: Count per status (COMPLETED, SERVED, PREPARING, etc.)
+- **Payment Breakdown**: Count and total per method (CASH, CARD, UPI, WALLET, SPLIT)
+- **Low Stock Alerts**: Items below reorder threshold (highlighted)
+- **Executive Summary**: AI-generated analysis from GPT-4o
+- **Insights**: Numbered list of data-driven observations
+- **Recommendations**: Numbered list of actionable suggestions
+
+### Step 4: Test Cloudinary File Upload (Standalone)
+
+```bash
+# Using PowerShell - upload a test file
+$headers = @{Authorization = "Bearer $token"}
+$form = @{file = Get-Item "C:\path\to\testfile.jpg"; folder = "test"}
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/upload/" -Method POST -Headers $headers -Form $form
+```
+
+**Expected Response (201 Created):**
+```json
+{
+  "url": "https://res.cloudinary.com/dfhl1aopy/image/upload/.../testfile.jpg",
+  "public_id": "twinengine/test/testfile",
+  "resource_type": "image"
+}
+```
+
+### Step 5: Test File Deletion from Cloudinary
+
+```bash
+# Using PowerShell
+$headers = @{Authorization = "Bearer $token"; "Content-Type" = "application/json"}
+$body = '{"public_id": "twinengine/test/testfile"}'
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/upload/delete/" -Method DELETE -Headers $headers -Body $body
+```
+
+**Expected Response (200 OK):**
+```json
+{
+  "message": "File deleted successfully",
+  "public_id": "twinengine/test/testfile"
+}
+```
+
+### Quick Reference: All New API Endpoints
+
+| Method | Endpoint | Purpose | Auth |
+|--------|----------|---------|------|
+| POST | `/api/reports/generate/` | Generate AI PDF report | JWT |
+| GET | `/api/reports/` | List all reports | JWT |
+| GET | `/api/reports/<id>/` | Get single report details | JWT |
+| GET | `/api/reports/daily/` | Get today's daily report | JWT |
+| POST | `/api/upload/` | Upload single file to Cloudinary | JWT |
+| POST | `/api/upload/multi/` | Upload multiple files (max 10) | JWT |
+| DELETE | `/api/upload/delete/` | Delete file from Cloudinary | JWT |
+
+### Troubleshooting
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| `401 Unauthorized` | Token expired or missing | Re-login at `/api/auth/token/` |
+| `400 Bad Request` on report | Invalid outlet_id or date | Check outlet exists: `python manage.py shell -c "from apps.hospitality_group.models import Outlet; print(Outlet.objects.values('id','name'))"` |
+| Report shows all zeros | No data for that outlet/date | Run `python manage.py generate_synthetic_data` and use today's date |
+| GPT-4o fallback used | Azure OpenAI key issue | Check `AZURE_OPENAI_KEY` in `.env`; report still generates with local analysis |
+| PDF not downloadable | Cloudinary config issue | Check `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` in `.env` |

@@ -128,4 +128,4 @@ class PaymentLog(models.Model):
         ]
     
     def __str__(self):
-        return f"Payment {self.status}: ₹{self.amount} ({self.method}) for Order #{self.order.pk}"
+        return f"Payment {self.status}: Rs.{self.amount} ({self.method}) for Order #{self.order.pk}"
