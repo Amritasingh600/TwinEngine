@@ -390,4 +390,79 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/upload/delete/" -Method DELETE
 | `400 Bad Request` on report | Invalid outlet_id or date | Check outlet exists: `python manage.py shell -c "from apps.hospitality_group.models import Outlet; print(Outlet.objects.values('id','name'))"` |
 | Report shows all zeros | No data for that outlet/date | Run `python manage.py generate_synthetic_data` and use today's date |
 | GPT-4o fallback used | Azure OpenAI key issue | Check `AZURE_OPENAI_KEY` in `.env`; report still generates with local analysis |
-| PDF not downloadable | Cloudinary config issue | Check `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` in `.env` |
+| `PDF not downloadable` | Cloudinary config issue | Check `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` in `.env` |
+
+---
+
+## March 3, 2026 -- ML Prediction Module (Complete Implementation)
+
+### What Was Built
+Implemented the full **Demand Forecasting ML Module** with 6 machine learning models, a unified prediction service, 8 REST API endpoints, a training management command, and a comprehensive test suite.
+
+### 6 ML Models Implemented
+
+| # | Model | Algorithm | Purpose |
+|---|-------|-----------|---------|
+| 1 | BusyHoursPredictor | RandomForestClassifier | Predicts busy vs. slow hours |
+| 2 | FootfallForecaster | GradientBoostingRegressor | Forecasts expected guest count |
+| 3 | FoodDemandPredictor | RandomForestRegressor | Predicts order volume per category |
+| 4 | InventoryPredictor | GradientBoostingRegressor | Forecasts inventory depletion & reorder timing |
+| 5 | StaffingOptimizer | RandomForestRegressor | Recommends optimal staff count per shift |
+| 6 | RevenueForecaster | GradientBoostingRegressor | Predicts revenue by hour/day |
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `apps/predictive_core/ml/__init__.py` | ML package init |
+| `apps/predictive_core/ml/feature_engineering.py` | Feature extraction from SalesData |
+| `apps/predictive_core/ml/busy_hours.py` | BusyHoursPredictor model |
+| `apps/predictive_core/ml/footfall.py` | FootfallForecaster model |
+| `apps/predictive_core/ml/food_demand.py` | FoodDemandPredictor model |
+| `apps/predictive_core/ml/inventory_predictor.py` | InventoryPredictor model |
+| `apps/predictive_core/ml/staffing_optimizer.py` | StaffingOptimizer model |
+| `apps/predictive_core/ml/revenue_forecaster.py` | RevenueForecaster model |
+| `apps/predictive_core/ml/prediction_service.py` | PredictionService facade (unified API) |
+| `apps/predictive_core/management/commands/train_models.py` | `python manage.py train_models` command |
+| `apps/predictive_core/tests/test_ml_predictions.py` | 10 unit tests for all endpoints |
+| `demo_predictions.py` | Demo script to test all endpoints via Django test client |
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `apps/predictive_core/views.py` | Added 8 prediction API views |
+| `apps/predictive_core/urls.py` | Added 8 prediction URL routes |
+| `apps/predictive_core/serializers.py` | Added prediction request serializers |
+| `apps/predictive_core/admin.py` | Fixed fieldsets (SalesData + InventoryItem field mismatches) |
+| `requirements.txt` | Added scikit-learn, pandas, numpy, joblib |
+
+### 8 Prediction API Endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/predictions/busy-hours/<outlet_id>/` | Predict busy/slow hours for a date |
+| GET | `/api/predictions/footfall/<outlet_id>/` | Forecast expected guest count |
+| GET | `/api/predictions/food-demand/<outlet_id>/` | Predict order volume by category |
+| GET | `/api/predictions/inventory/<outlet_id>/` | Inventory depletion forecast & reorder alerts |
+| GET | `/api/predictions/staffing/<outlet_id>/` | Optimal staff count per shift |
+| GET | `/api/predictions/revenue/<outlet_id>/` | Revenue forecast by hour |
+| GET | `/api/predictions/dashboard/<outlet_id>/` | Combined dashboard (all predictions) |
+| POST | `/api/predictions/train/<outlet_id>/` | Trigger model training for an outlet |
+
+### Training & Testing Results
+- **Training**: `python manage.py train_models --outlet-id 4` -- All 6 models trained successfully
+- **Unit Tests**: 10/10 passing (`python manage.py test apps.predictive_core.tests.test_ml_predictions`)
+- **Live Demo**: `demo_predictions.py` -- All 7 endpoint groups returned real prediction data
+- **Dependencies Added**: scikit-learn==1.8.0, pandas==3.0.1, numpy==2.4.2, joblib==1.5.3
+
+### Bug Fixes Applied
+- Fixed `StaffingOptimizer`: Changed `servicenode_set` to `service_nodes` (correct `related_name` from ServiceNode model)
+- Fixed `SalesDataAdmin`: Removed non-existent fields (`total_covers`, `avg_party_size`, `peak_hour_indicator`) from fieldsets
+- Fixed `InventoryItemAdmin`: Changed `min_quantity`/`max_quantity` to `reorder_threshold`/`par_level`, removed non-existent `created_at`
+
+### Security Cleanup (GitHub-Ready)
+- Removed all real secrets from `.env` (DB password, Azure key, Cloudinary credentials)
+- Verified `.env` is in `.gitignore` (both root and backend)
+- Added `*.joblib` and `**/ml_models/` to `.gitignore` (trained model artifacts)
+- `.env.example` already has clean placeholder values

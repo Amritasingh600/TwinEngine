@@ -43,6 +43,10 @@ staticfiles/
 .env.local
 .env.*.local
 
+# ML model artifacts
+*.joblib
+**/ml_models/
+
 # =========================
 # Node / Frontend
 # =========================

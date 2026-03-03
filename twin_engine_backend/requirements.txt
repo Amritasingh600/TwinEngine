@@ -27,6 +27,12 @@ reportlab>=4.4,<5.0
 requests>=2.32,<3.0
 pillow>=12.1,<13.0
 
+# --- Machine Learning & Predictions ---
+scikit-learn>=1.6,<2.0
+pandas>=2.2,<3.0
+numpy>=2.2,<3.0
+joblib>=1.4,<2.0
+
 # --- Deployment & Utilities ---
 whitenoise>=6.11,<7.0
 gunicorn>=25.0,<26.0

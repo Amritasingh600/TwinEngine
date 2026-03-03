@@ -24,8 +24,8 @@ class SalesDataAdmin(admin.ModelAdmin):
         ('Sales Metrics', {
             'fields': ('total_orders', 'total_revenue', 'avg_wait_time_minutes')
         }),
-        ('Demand Metrics', {
-            'fields': ('total_covers', 'avg_party_size', 'peak_hour_indicator'),
+        ('Detail Metrics', {
+            'fields': ('avg_ticket_size', 'category_sales', 'top_items', 'weather_condition'),
             'classes': ('collapse',)
         }),
         ('Metadata', {
@@ -58,10 +58,14 @@ class InventoryItemAdmin(admin.ModelAdmin):
             'fields': ('name', 'outlet', 'category')
         }),
         ('Quantity Management', {
-            'fields': ('current_quantity', 'min_quantity', 'max_quantity', 'unit')
+            'fields': ('current_quantity', 'reorder_threshold', 'par_level', 'unit')
+        }),
+        ('Cost & Expiry', {
+            'fields': ('unit_cost', 'expiry_date', 'last_restocked'),
+            'classes': ('collapse',)
         }),
         ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
+            'fields': ('updated_at',),
             'classes': ('collapse',)
         }),
     )

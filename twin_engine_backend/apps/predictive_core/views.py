@@ -1,14 +1,19 @@
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Avg
+from datetime import datetime
+
 from .models import SalesData, InventoryItem, StaffSchedule
 from .serializers import (
     SalesDataSerializer, SalesDataCreateSerializer,
     InventoryItemSerializer, InventoryItemListSerializer, InventoryUpdateSerializer,
     StaffScheduleSerializer, StaffScheduleCreateSerializer
 )
+from .ml.prediction_service import PredictionService
 
 
 class SalesDataViewSet(viewsets.ModelViewSet):
@@ -206,3 +211,156 @@ class StaffScheduleViewSet(viewsets.ModelViewSet):
         qs = self.queryset.filter(staff_id=staff_id)
         serializer = StaffScheduleSerializer(qs, many=True)
         return Response(serializer.data)
+
+
+# =====================================================================
+# Prediction API Endpoints
+# =====================================================================
+
+class PredictionBaseView(APIView):
+    """Base view with shared parameter parsing."""
+    permission_classes = [IsAuthenticated]
+
+    def _parse_params(self, request):
+        outlet_id = request.query_params.get('outlet')
+        date_str = request.query_params.get('date')
+
+        if not outlet_id:
+            return None, None, Response(
+                {"error": "outlet query parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            outlet_id = int(outlet_id)
+        except ValueError:
+            return None, None, Response(
+                {"error": "outlet must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if date_str:
+            try:
+                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return None, None, Response(
+                    {"error": "date must be YYYY-MM-DD format"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            from django.utils import timezone
+            target_date = timezone.now().date()
+
+        return outlet_id, target_date, None
+
+
+class BusyHoursPredictionView(PredictionBaseView):
+    """GET /api/predictions/busy-hours/?outlet=4&date=2026-03-04"""
+
+    def get(self, request):
+        outlet_id, target_date, error = self._parse_params(request)
+        if error:
+            return error
+
+        service = PredictionService()
+        result = service.get_busy_hours(outlet_id, target_date)
+        return Response(result)
+
+
+class FootfallPredictionView(PredictionBaseView):
+    """GET /api/predictions/footfall/?outlet=4&date=2026-03-04"""
+
+    def get(self, request):
+        outlet_id, target_date, error = self._parse_params(request)
+        if error:
+            return error
+
+        service = PredictionService()
+        result = service.get_footfall(outlet_id, target_date)
+        return Response(result)
+
+
+class FoodDemandPredictionView(PredictionBaseView):
+    """GET /api/predictions/food-demand/?outlet=4&date=2026-03-04"""
+
+    def get(self, request):
+        outlet_id, target_date, error = self._parse_params(request)
+        if error:
+            return error
+
+        service = PredictionService()
+        result = service.get_food_demand(outlet_id, target_date)
+        return Response(result)
+
+
+class InventoryAlertView(PredictionBaseView):
+    """GET /api/predictions/inventory-alerts/?outlet=4"""
+
+    def get(self, request):
+        outlet_id, _, error = self._parse_params(request)
+        if error:
+            return error
+
+        service = PredictionService()
+        result = service.get_inventory_alerts(outlet_id)
+        return Response(result)
+
+
+class StaffingPredictionView(PredictionBaseView):
+    """GET /api/predictions/staffing/?outlet=4&date=2026-03-04"""
+
+    def get(self, request):
+        outlet_id, target_date, error = self._parse_params(request)
+        if error:
+            return error
+
+        service = PredictionService()
+        result = service.get_staffing(outlet_id, target_date)
+        return Response(result)
+
+
+class RevenuePredictionView(PredictionBaseView):
+    """GET /api/predictions/revenue/?outlet=4&date=2026-03-04"""
+
+    def get(self, request):
+        outlet_id, target_date, error = self._parse_params(request)
+        if error:
+            return error
+
+        days = int(request.query_params.get('days', 7))
+        service = PredictionService()
+        result = service.get_revenue_forecast(outlet_id, target_date, days)
+        return Response(result)
+
+
+class PredictionDashboardView(PredictionBaseView):
+    """GET /api/predictions/dashboard/?outlet=4&date=2026-03-04"""
+
+    def get(self, request):
+        outlet_id, target_date, error = self._parse_params(request)
+        if error:
+            return error
+
+        service = PredictionService()
+        result = service.get_dashboard(outlet_id, target_date)
+        return Response(result)
+
+
+class TrainModelsView(APIView):
+    """
+    POST /api/predictions/train/?outlet=4
+    Manager-only endpoint to trigger model retraining.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        outlet_id = request.query_params.get('outlet')
+        if not outlet_id:
+            return Response(
+                {"error": "outlet query parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        service = PredictionService()
+        results = service.train_all(int(outlet_id))
+        return Response({"status": "training complete", "results": results})

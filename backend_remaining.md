@@ -356,7 +356,7 @@ This document outlines all remaining backend tasks with detailed implementation 
 | 🔴 High | Environment & CORS Configuration | ✅ COMPLETED | - |
 | 🟠 Medium | Azure GPT-4o Report Generation | ✅ COMPLETED | - |
 | 🟠 Medium | Cloudinary Media Integration | ✅ COMPLETED | - |
-| 🟠 Medium | Demand Forecasting ML | ⏳ Pending | 6-8 hours |
+| 🟠 Medium | Demand Forecasting ML | ✅ COMPLETED | - |
 | 🟠 Medium | API Documentation (Swagger) | ⏳ Pending | 3-4 hours |
 | 🟠 Medium | Data Seeding & Fixtures | ✅ COMPLETED | - |
 | 🟢 Low | Unit & Integration Tests | ⏳ Pending | 8-10 hours |
@@ -366,7 +366,7 @@ This document outlines all remaining backend tasks with detailed implementation 
 | 🟢 Low | Logging & Error Monitoring | ⏳ Pending | 3-4 hours |
 | 🟢 Low | Deployment Guide | ⏳ Pending | 2-3 hours |
 
-**Total Remaining:** 7 tasks | **Est. Time:** 29-40 hours
+**Total Remaining:** 6 tasks | **Est. Time:** 23-32 hours
 
 ---
 
@@ -376,7 +376,7 @@ This document outlines all remaining backend tasks with detailed implementation 
 1. ~~PostgreSQL/Neon Migration~~ — ✅ COMPLETED
 
 ### Medium Priority (Should Have)
-2. [Demand Forecasting ML](#2-demand-forecasting-ml)
+2. ~~Demand Forecasting ML~~ — ✅ COMPLETED
 3. [API Documentation (Swagger)](#3-api-documentation-swagger)
 
 ### Lower Priority (Nice to Have)
@@ -423,17 +423,25 @@ python manage.py import_data pre_migration_backup.json
 
 ---
 
-## 2. Demand Forecasting ML
+## 2. Demand Forecasting ML — ✅ COMPLETED
 
 **Priority:** 🟡 Medium  
-**Estimated Time:** 6-8 hours  
-**Dependencies:** `scikit-learn`, `pandas`
+**Completed On:** March 3, 2026
 
-### Purpose
-ML predictions for:
-- Expected covers by time slot
-- Inventory depletion forecasts
-- Optimal staffing levels
+### What Was Implemented:
+- 6 ML models: BusyHoursPredictor, FootfallForecaster, FoodDemandPredictor, InventoryPredictor, StaffingOptimizer, RevenueForecaster
+- PredictionService facade for unified access
+- 8 REST API endpoints (busy-hours, footfall, food-demand, inventory, staffing, revenue, dashboard, train)
+- `train_models` management command
+- 10 unit tests (all passing)
+- Feature engineering pipeline from SalesData
+- Dependencies: scikit-learn, pandas, numpy, joblib
+
+### Files Created:
+- `apps/predictive_core/ml/` — 9 files (models, feature engineering, prediction service)
+- `apps/predictive_core/management/commands/train_models.py`
+- `apps/predictive_core/tests/test_ml_predictions.py`
+- `demo_predictions.py`
 
 ---
 
@@ -544,7 +552,7 @@ REST_FRAMEWORK = {
 | ✅ | Azure GPT-4o Report Pipeline | Medium | Done | 4-6h |
 | ✅ | Synthetic Data Generator | Medium | Done | 2-3h |
 | ✅ | PostgreSQL/Neon Migration | 🔴 High | Done | 2-3h |
-| 2 | Demand Forecasting ML | 🟡 Medium | Pending | 6-8h |
+| 2 | Demand Forecasting ML | 🟡 Medium | ✅ Done | 6-8h |
 | 3 | API Documentation | 🟡 Medium | Pending | 2-3h |
 | 4 | Unit & Integration Tests | 🟢 Lower | Pending | 4-6h |
 | 5 | Celery Background Tasks | 🟢 Lower | Pending | 4-5h |
@@ -552,7 +560,7 @@ REST_FRAMEWORK = {
 | 7 | Rate Limiting | 🟢 Lower | Pending | 1-2h |
 | 8 | Deployment Guide | 🟢 Lower | Pending | 2-3h |
 
-**Total Estimated Time:** ~22-30 hours remaining (10 completed, 7 pending)
+**Total Estimated Time:** ~16-24 hours remaining (11 completed, 6 pending)
 
 ---
 
@@ -567,6 +575,7 @@ REST_FRAMEWORK = {
 - [x] Azure GPT-4o Report Pipeline ✅
 - [x] Synthetic Data Generator ✅
 - [x] PostgreSQL/Neon Migration ✅
+- [x] Demand Forecasting ML ✅
 
 ### For production release add:
 - [ ] Task 3: API Docs (Swagger)
