@@ -109,7 +109,7 @@ class FileDeleteView(APIView):
         serializer.is_valid(raise_exception=True)
 
         public_id = serializer.validated_data["public_id"]
-        resource_type = serializer.validated_data.get("resource_type", "image")
+        resource_type = serializer.validated_data["resource_type"]
 
         result = CloudinaryUploadService.delete_file(public_id, resource_type=resource_type)
 

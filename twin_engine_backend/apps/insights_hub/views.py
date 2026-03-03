@@ -61,7 +61,13 @@ class DailySummaryViewSet(viewsets.ModelViewSet):
     def trends(self, request):
         """Get performance trends over time."""
         outlet_id = request.query_params.get('outlet')
-        days = int(request.query_params.get('days', 30))
+        try:
+            days = int(request.query_params.get('days', 30))
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Invalid "days" parameter. Must be an integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         
         start_date = timezone.now().date() - timedelta(days=days)
         
@@ -83,7 +89,13 @@ class DailySummaryViewSet(viewsets.ModelViewSet):
     def compare(self, request):
         """Compare performance across outlets."""
         brand_id = request.query_params.get('brand')
-        days = int(request.query_params.get('days', 7))
+        try:
+            days = int(request.query_params.get('days', 7))
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Invalid "days" parameter. Must be an integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         
         start_date = timezone.now().date() - timedelta(days=days)
         
@@ -522,7 +534,7 @@ class DailyReportView(APIView):
                         'url': '/api/reports/generate/',
                         'method': 'POST',
                         'body': {
-                            'outlet_id': int(outlet_id) if outlet_id else '<outlet_id>',
+                            'outlet_id': outlet_id or '<outlet_id>',
                             'report_type': 'DAILY',
                             'start_date': str(report_date),
                         }

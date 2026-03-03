@@ -1,32 +1,32 @@
 # --- Core Backend ---
-django>=6.0
-djangorestframework>=3.16
-djangorestframework-simplejwt>=5.5
-django-cors-headers>=4.9
-django-filter>=25.2
-psycopg2-binary>=2.9
-dj-database-url>=2.1
-python-dotenv>=1.2
+django>=5.2,<6.0
+djangorestframework>=3.16,<4.0
+djangorestframework-simplejwt>=5.5,<6.0
+django-cors-headers>=4.9,<5.0
+django-filter>=25.2,<26.0
+psycopg2-binary>=2.9,<3.0
+dj-database-url>=3.1,<4.0
+python-dotenv>=1.2,<2.0
 
 # --- AI & Computer Vision ---
-opencv-python>=4.13
-huggingface_hub>=1.5
-openai>=2.24
-azure-ai-contentsafety>=1.0
+opencv-python>=4.13,<5.0
+huggingface_hub>=1.4,<2.0
+openai>=2.20,<3.0
+azure-ai-contentsafety>=1.0,<2.0
 
 # --- Real-time & WebSockets ---
-channels[daphne]>=4.3
-channels-redis>=4.3
+channels[daphne]>=4.3,<5.0
+channels-redis>=4.3,<5.0
 
 # --- Media & Streaming ---
-cloudinary>=1.44
+cloudinary>=1.44,<2.0
 yt-dlp>=2026.2
 
 # --- Reporting & Analytics ---
-reportlab>=4.4
-requests>=2.32
-pillow>=12.1
+reportlab>=4.4,<5.0
+requests>=2.32,<3.0
+pillow>=12.1,<13.0
 
 # --- Deployment & Utilities ---
-whitenoise>=6.12
-gunicorn>=25.1
+whitenoise>=6.11,<7.0
+gunicorn>=25.0,<26.0

@@ -49,6 +49,6 @@ class FileDeleteSerializer(serializers.Serializer):
     public_id = serializers.CharField(help_text="Cloudinary public_id of the file")
     resource_type = serializers.ChoiceField(
         choices=["image", "raw", "video"],
-        default="image",
-        help_text="Cloudinary resource type",
+        required=True,
+        help_text="Cloudinary resource type (must match the type used during upload)",
     )

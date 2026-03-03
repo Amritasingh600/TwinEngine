@@ -100,6 +100,7 @@ def generate_report_with_gpt(raw_data: dict) -> dict:
         len(user_message), deployment,
     )
 
+    content = ""
     try:
         response = client.chat.completions.create(
             model=deployment,
@@ -130,8 +131,9 @@ def generate_report_with_gpt(raw_data: dict) -> dict:
     except json.JSONDecodeError as e:
         logger.error("GPT-4o returned invalid JSON: %s", e)
         # Fallback: use the raw text as the summary
+        raw_text = content if content else "Failed to parse GPT-4o response."
         return {
-            "executive_summary": content if 'content' in dir() else "Failed to parse GPT-4o response.",
+            "executive_summary": raw_text,
             "insights": ["Report parsing error — raw response could not be structured."],
             "recommendations": ["Retry report generation or check Azure OpenAI configuration."],
             "model_used": deployment,
