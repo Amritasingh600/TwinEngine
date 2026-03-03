@@ -53,7 +53,7 @@ def validate_status_transition(old_status, new_status):
     allowed = VALID_TRANSITIONS.get(old_status, [])
     if new_status not in allowed:
         raise ValidationError(
-            f"Invalid status transition: {old_status or 'NEW'} → {new_status}. "
+            f"Invalid status transition: {old_status or 'NEW'} -> {new_status}. "
             f"Allowed transitions: {', '.join(allowed) if allowed else 'None (terminal state)'}"
         )
     return True

@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
+from django.core.exceptions import ValidationError as DjangoValidationError
 from .models import OrderTicket, PaymentLog
 from .serializers import (
     OrderTicketSerializer, OrderTicketCreateSerializer, OrderTicketListSerializer,
@@ -38,13 +39,27 @@ class OrderTicketViewSet(viewsets.ModelViewSet):
             return OrderTicketListSerializer
         return OrderTicketSerializer
     
+    def perform_update(self, serializer):
+        """Catch Django ValidationError from pre_save signal for status transitions."""
+        try:
+            serializer.save()
+        except DjangoValidationError as exc:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError(detail=exc.messages)
+
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
         """Update order status and auto-update table color."""
         order = self.get_object()
         serializer = OrderStatusUpdateSerializer(order, data=request.data)
         if serializer.is_valid():
-            order = serializer.update(order, serializer.validated_data)
+            try:
+                order = serializer.update(order, serializer.validated_data)
+            except DjangoValidationError as exc:
+                return Response(
+                    {'status': exc.messages},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             return Response(OrderTicketSerializer(order).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     

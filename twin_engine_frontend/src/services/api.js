@@ -1,0 +1,107 @@
+import axios from 'axios';
+
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
+const api = axios.create({
+  baseURL: `${API_BASE}/api`,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+// Attach JWT token to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// Auto-refresh on 401
+api.interceptors.response.use(
+  (res) => res,
+  async (err) => {
+    const original = err.config;
+    if (err.response?.status === 401 && !original._retry) {
+      original._retry = true;
+      const refresh = localStorage.getItem('refresh_token');
+      if (refresh) {
+        try {
+          const { data } = await axios.post(`${API_BASE}/api/auth/token/refresh/`, { refresh });
+          localStorage.setItem('access_token', data.access);
+          if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
+          original.headers.Authorization = `Bearer ${data.access}`;
+          return api(original);
+        } catch {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          window.location.href = '/login';
+        }
+      }
+    }
+    return Promise.reject(err);
+  }
+);
+
+// --- Auth ---
+export const login = (username, password) =>
+  api.post('/auth/token/', { username, password });
+
+export const getProfile = () => api.get('/auth/me/');
+
+// --- Outlets ---
+export const getOutlets = () => api.get('/outlets/');
+
+// --- Floor / Nodes ---
+export const getNodes = (outletId) =>
+  api.get('/nodes/', { params: { outlet: outletId, is_active: true } });
+
+export const getFlowGraph = (outletId) =>
+  api.get('/flows/graph/', { params: { outlet: outletId } });
+
+export const updateNodeStatus = (nodeId, status) =>
+  api.post(`/nodes/${nodeId}/update_status/`, { status });
+
+// --- Orders ---
+export const getOrders = (params) => api.get('/orders/', { params });
+
+export const getOrder = (id) => api.get(`/orders/${id}/`);
+
+export const updateOrderStatus = (id, newStatus) =>
+  api.post(`/orders/${id}/update_status/`, { status: newStatus });
+
+// --- Predictions ---
+export const getPredictionDashboard = (outletId, date) =>
+  api.get('/predictions/dashboard/', { params: { outlet: outletId, date } });
+
+export const getBusyHours = (outletId, date) =>
+  api.get('/predictions/busy-hours/', { params: { outlet: outletId, date } });
+
+export const getFootfall = (outletId, date) =>
+  api.get('/predictions/footfall/', { params: { outlet: outletId, date } });
+
+export const getRevenue = (outletId, date) =>
+  api.get('/predictions/revenue/', { params: { outlet: outletId, date } });
+
+export const getFoodDemand = (outletId, date) =>
+  api.get('/predictions/food-demand/', { params: { outlet: outletId, date } });
+
+export const getInventoryAlerts = (outletId) =>
+  api.get('/predictions/inventory-alerts/', { params: { outlet: outletId } });
+
+export const getStaffing = (outletId, date) =>
+  api.get('/predictions/staffing/', { params: { outlet: outletId, date } });
+
+// --- Inventory ---
+export const getInventory = (outletId) =>
+  api.get('/inventory/', { params: { outlet: outletId } });
+
+// --- Reports ---
+export const generateReport = (outletId, reportType, startDate) =>
+  api.post('/reports/generate/', {
+    outlet_id: outletId,
+    report_type: reportType,
+    start_date: startDate,
+  });
+
+export const getDailySummaries = (outletId) =>
+  api.get('/summaries/', { params: { outlet: outletId } });
+
+export default api;

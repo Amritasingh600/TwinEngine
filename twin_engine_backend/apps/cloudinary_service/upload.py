@@ -90,7 +90,7 @@ class CloudinaryUploadService:
         try:
             result = cloudinary.uploader.upload(uploaded_file, **upload_kwargs)
             logger.info(
-                "Cloudinary upload OK  ▸ %s  ▸ %s",
+                "Cloudinary upload OK | %s | %s",
                 result.get("public_id"),
                 result.get("secure_url"),
             )
@@ -105,7 +105,7 @@ class CloudinaryUploadService:
                 "error": None,
             }
         except Exception as exc:
-            logger.error("Cloudinary upload FAILED  ▸ %s  ▸ %s", filename, exc)
+            logger.error("Cloudinary upload FAILED | %s | %s", filename, exc)
             return {
                 "success": False,
                 "url": None,
@@ -154,7 +154,7 @@ class CloudinaryUploadService:
         try:
             result = cloudinary.uploader.upload(file_io, **upload_kwargs)
             logger.info(
-                "Cloudinary bytes upload OK  ▸ %s  ▸ %s",
+                "Cloudinary bytes upload OK | %s | %s",
                 result.get("public_id"),
                 result.get("secure_url"),
             )
@@ -169,7 +169,7 @@ class CloudinaryUploadService:
                 "error": None,
             }
         except Exception as exc:
-            logger.error("Cloudinary bytes upload FAILED  ▸ %s  ▸ %s", filename, exc)
+            logger.error("Cloudinary bytes upload FAILED | %s | %s", filename, exc)
             return {
                 "success": False,
                 "url": None,
@@ -194,10 +194,10 @@ class CloudinaryUploadService:
             result = cloudinary.uploader.destroy(public_id, resource_type=resource_type)
             ok = result.get("result") == "ok"
             if ok:
-                logger.info("Cloudinary delete OK  ▸ %s", public_id)
+                logger.info("Cloudinary delete OK | %s", public_id)
             else:
-                logger.warning("Cloudinary delete returned  ▸ %s  ▸ %s", public_id, result)
+                logger.warning("Cloudinary delete returned | %s | %s", public_id, result)
             return {"success": ok, "error": None if ok else f"Cloudinary returned: {result}"}
         except Exception as exc:
-            logger.error("Cloudinary delete FAILED  ▸ %s  ▸ %s", public_id, exc)
+            logger.error("Cloudinary delete FAILED | %s | %s", public_id, exc)
             return {"success": False, "error": str(exc)}
