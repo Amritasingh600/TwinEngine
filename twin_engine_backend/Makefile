@@ -22,6 +22,9 @@ help: ## Show this help
 run: ## Start development server (Daphne ASGI)
 	$(MANAGE) runserver
 
+dev: ## Start Django + Celery + Frontend in one command (requires honcho: pip install honcho)
+	honcho -f Procfile.dev start
+
 run-asgi: ## Start Daphne ASGI server (WebSocket support)
 	daphne -b 0.0.0.0 -p 8000 twinengine_core.asgi:application
 

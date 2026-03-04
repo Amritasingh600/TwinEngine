@@ -1,0 +1,7 @@
+# Local development — all processes in one terminal
+# Usage: honcho -f Procfile.dev start
+#   or:  make dev
+
+django:   python manage.py runserver
+celery:   celery -A twinengine_core worker --loglevel=info
+frontend: cd ../twin_engine_frontend && npm run dev
