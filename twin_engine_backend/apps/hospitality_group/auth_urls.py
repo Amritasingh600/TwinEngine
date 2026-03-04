@@ -7,12 +7,24 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
+from twinengine_core.throttles import AuthRateThrottle
 from .views import RegisterView, UserProfileView, ChangePasswordView
 
+
+class ThrottledTokenObtainPairView(TokenObtainPairView):
+    """Login view with auth-scoped rate limiting."""
+    throttle_classes = [AuthRateThrottle]
+
+
+class ThrottledTokenRefreshView(TokenRefreshView):
+    """Token refresh with auth-scoped rate limiting."""
+    throttle_classes = [AuthRateThrottle]
+
+
 urlpatterns = [
-    # JWT Token endpoints
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    # JWT Token endpoints (rate-limited)
+    path('token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', ThrottledTokenRefreshView.as_view(), name='token_refresh'),
     path('token/verify/', TokenVerifyView.as_view(), name='token_verify'),
     
     # User management

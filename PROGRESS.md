@@ -465,4 +465,204 @@ Implemented the full **Demand Forecasting ML Module** with 6 machine learning mo
 - Removed all real secrets from `.env` (DB password, Azure key, Cloudinary credentials)
 - Verified `.env` is in `.gitignore` (both root and backend)
 - Added `*.joblib` and `**/ml_models/` to `.gitignore` (trained model artifacts)
+
+---
+
+### Phase 1: API Documentation (drf-spectacular) — COMPLETED ✅
+- Installed and configured `drf-spectacular` for OpenAPI 3.0 schema generation
+- Decorated all views across 6 apps with `@extend_schema` (70 paths, 119 operations)
+- Added Swagger UI (`/api/docs/`) and ReDoc (`/api/redoc/`)
+- Schema validation: **0 errors, 0 warnings**
+
+### Phase 2: Celery Background Jobs & Email Notifications — COMPLETED ✅
+- **4 Mar 2026** → Full Celery + Mailtrap email integration
+
+#### Celery Configuration
+- Installed `celery>=5.4.0`, `redis>=5.0.0`, `django-celery-beat>=2.6.0`, `django-celery-results>=2.5.1`
+- Created `twinengine_core/celery.py` — Celery app with Redis broker and auto-discovery
+- Updated `twinengine_core/__init__.py` — ensures Celery app loads on Django start
+- Result backend: `django-db` (task results stored in PostgreSQL via django-celery-results)
+- Beat scheduler: `DatabaseScheduler` (periodic tasks manageable via Django Admin)
+
+#### Background Tasks (6 total)
+| Task | Module | Description |
+|------|--------|-------------|
+| `train_models_for_outlet` | `predictive_core.tasks` | Retrain all 6 ML models for one outlet (async) |
+| `train_all_outlets` | `predictive_core.tasks` | Nightly cron: iterate all active outlets |
+| `send_inventory_alerts` | `predictive_core.tasks` | Email low-stock items for one outlet |
+| `send_inventory_alerts_all` | `predictive_core.tasks` | Morning cron: inventory sweep all outlets |
+| `generate_report_task` | `insights_hub.tasks` | Full report pipeline (data→GPT→PDF→Cloudinary→email) |
+| `email_report_task` | `insights_hub.tasks` | Email completed report link to brand contact |
+
+#### Celery Beat Schedule
+| Job | Task | Schedule |
+|-----|------|----------|
+| `nightly-model-retraining` | `train_all_outlets` | Daily at 02:00 |
+| `morning-inventory-alerts` | `send_inventory_alerts_all` | Daily at 07:00 |
+
+#### Email Integration (Mailtrap Sandbox)
+- Backend: `django.core.mail.backends.smtp.EmailBackend`
+- Host: `sandbox.smtp.mailtrap.io:2525` (Mailtrap SMTP sandbox)
+- Test email sent successfully to Mailtrap inbox
+- Two HTML email templates created:
+  - `templates/emails/inventory_alert.html` — low-stock alert table
+  - `templates/emails/report_ready.html` — report completion notification with download link
+
+#### View Updates (Async Dispatch)
+- `TrainModelsView.post()` → dispatches `train_models_for_outlet.delay()`, returns 202 with `task_id`
+  - Supports `?sync=true` for backward compatibility
+- `PDFReportViewSet.generate()` → dispatches `generate_report_task.delay()`, returns 202 with `task_id`
+  - Supports `?sync=true` for in-request execution
+
+#### Task Status Polling Endpoint
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/tasks/<task_id>/` | Poll Celery task status (PENDING/STARTED/SUCCESS/FAILURE) |
+
+#### Schema Update
+- **71 paths, 120 operations** (was 70/119)
+- New tag: **Tasks** — Celery background task status polling
+- Schema validation: **0 errors, 0 warnings** (exit code 0)
+
+#### How to Run Celery
+```bash
+# Worker (processes tasks)
+celery -A twinengine_core worker --loglevel=info
+
+# Beat (periodic task scheduler)
+celery -A twinengine_core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+```
 - `.env.example` already has clean placeholder values
+
+### Phase 3: Rate Limiting, Throttling & Security — COMPLETED ✅
+- **4 Mar 2026** → Full API throttling, brute-force protection, audit logging & security hardening
+
+#### DRF Throttling (7 scopes)
+| Scope | Rate | Applied To |
+|-------|------|-----------|
+| `anon` | 30/min | All unauthenticated requests (global default) |
+| `user` | 120/min | All authenticated requests (global default) |
+| `auth` | 10/min | Login, register, password change, token refresh |
+| `predictions` | 60/min | All 8 prediction endpoints + training |
+| `reports` | 10/min | PDF report generation |
+| `uploads` | 20/min | Cloudinary file upload/delete |
+| `training` | 5/min | ML model retraining |
+
+- Created `twinengine_core/throttles.py` — 5 custom `SimpleRateThrottle` subclasses
+- Applied throttle classes to views across 4 apps:
+  - `hospitality_group`: RegisterView, ChangePasswordView, token obtain/refresh
+  - `predictive_core`: All prediction views (via PredictionBaseView), TrainModelsView
+  - `cloudinary_service`: FileUploadView, MultiFileUploadView, FileDeleteView
+  - `insights_hub`: PDFReportViewSet
+
+#### Brute-Force Protection (django-axes 8.3.1)
+- Installed `django-axes>=8.0,<9.0`
+- Configuration:
+  - Lock after **5 failed login attempts**
+  - Cooloff period: **30 minutes**
+  - Lockout by **username + IP combination**
+  - Reset counter on successful login
+- All 10 axes migrations applied
+
+#### Audit Logging Middleware
+- Created `twinengine_core/middleware.py` — `RequestAuditMiddleware`
+- Logs: `user | method path | status | duration_ms | IP` to `logs/audit.log`
+- Skips static/media paths for performance
+- Rotating file handler: 10 MB max, 5 backups
+
+#### Security Headers (added to every response)
+| Header | Value |
+|--------|-------|
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), payment=()` |
+
+#### Additional Security Hardening
+- Password minimum length raised to **10 characters**
+- Session timeout: **2 hours**, expires on browser close
+- Upload size limit: **10 MB** (both memory and file)
+- Django system check: **0 issues**
+- Schema validation: **0 errors, 0 warnings** (71 paths, 120 operations — unchanged)
+
+### Phase 4: Deployment Configuration (Azure + Render + Docker) — COMPLETED ✅
+- **4 Mar 2026** → Full containerized deployment setup for Azure (primary) and Render (free tier)
+
+#### Docker Configuration
+- **Dockerfile** — Multi-stage build (builder + runtime), Python 3.12-slim, non-root user, health check
+- **docker-entrypoint.sh** — Universal entrypoint supporting 4 modes: `server` (Daphne ASGI), `gunicorn` (WSGI), `worker` (Celery), `beat` (scheduler)
+- **docker-compose.yml** — Full local stack: PostgreSQL 16, Redis 7, Django web, Celery worker, Celery beat
+- **.dockerignore** — Excludes venv, .git, IDE files, docs, sqlite, media
+
+#### Azure Deployment (Primary Target)
+| File | Purpose |
+|------|---------|
+| `.azure/infra.bicep` | Infrastructure-as-Code: App Service Plan, Web App (container), PostgreSQL Flexible Server, Azure Cache for Redis, Container Registry |
+| `.azure/infra.parameters.json` | Parameter template (Key Vault reference for DB password) |
+| `.azure/deploy.sh` | One-command deploy script: creates RG → deploys Bicep → builds Docker → pushes to ACR → configures app → restarts |
+
+- Azure App Service with Linux containers, WebSocket support, health check path
+- PostgreSQL Flexible Server (Burstable B1ms, 32 GB, SSL required)
+- Azure Cache for Redis (Basic C0, TLS 1.2)
+- Azure Container Registry (Basic SKU, admin enabled)
+
+#### Render Deployment (Free Tier)
+| File | Purpose |
+|------|---------|
+| `render.yaml` | Blueprint spec: web service + worker + PostgreSQL database |
+| `build.sh` | Build script: install deps → collectstatic → migrate |
+| `Procfile` | Process types: web (Daphne), worker (Celery), beat (Celery Beat) |
+
+#### GitHub Actions CI/CD
+| Workflow | Trigger | Pipeline |
+|----------|---------|----------|
+| `.github/workflows/ci.yml` | Push to main/develop, PRs | Lint → Test (PostgreSQL + Redis) → Docker build |
+| `.github/workflows/deploy-azure.yml` | Push to main, manual dispatch | Build → Push to ACR → Deploy to App Service → Health check |
+
+#### Health Check Endpoint
+- `GET /api/health/` — Returns `{"status": "healthy", "version": "2.0.0", "database": "connected"}`
+- Returns 503 if database unreachable
+- Used by Docker HEALTHCHECK, Azure App Service, and Render
+
+#### Settings Hardening
+- **Database**: Auto-detects SQLite (dev) vs PostgreSQL (prod) from `DATABASE_URL`
+- **Persistent connections**: `CONN_MAX_AGE=600` in production, health checks enabled
+- **Environment detection**: `DEPLOY_ENV` variable (`development` / `staging` / `production`)
+- **Container logging**: `CONTAINER=true` switches to stdout-only (no file handlers) — optimal for Azure Log Analytics / Docker
+- **Browsable API**: Disabled in production (`DEBUG=False`)
+- **Deployment check**: `python manage.py check --deploy` passes (only dev SECRET_KEY warning)
+
+#### Makefile Additions
+- `make docker-build` / `docker-up` / `docker-down` / `docker-logs` / `docker-shell` / `docker-clean`
+- `make azure-infra` / `check-deploy` / `celery-worker` / `celery-beat`
+
+#### Documentation
+- Created `DEPLOYMENT.md` — Complete deployment guide with Azure (3 options), Render, Docker, and CI/CD instructions
+
+### Phase 5: Comprehensive Testing — COMPLETED ✅
+- **4 Mar 2026** → Full test suite across all 6 apps + core
+
+#### Test Coverage Summary
+- **198 tests total**, all passing
+- Run command: `DATABASE_URL='sqlite:///db.sqlite3' python manage.py test --verbosity=2`
+
+#### Test Files Created / Updated
+
+| App | File | Tests | Coverage |
+|-----|------|-------|----------|
+| `hospitality_group` | `tests.py` | 33 | Models (Brand, Outlet, UserProfile), Permissions (IsOutletUser, IsManagerOrReadOnly, IsManager), Auth API (register, login, refresh, profile, change-password), Brand CRUD, Outlet CRUD, Unauth access |
+| `order_engine` | `tests/__init__.py` | 18 | Models (OrderTicket, PaymentLog), Status transitions (7 valid/invalid), Order API (CRUD + update_status + active), Payment API |
+| `order_engine` | `tests/test_table_status.py` | 11 | Signal-based table status (pre-existing, preserved) |
+| `layout_twin` | `tests.py` | 16 | Models (ServiceNode, ServiceFlow), Node API (CRUD + update_status + by_outlet), Flow API (CRUD + graph) |
+| `predictive_core` | `tests/__init__.py` | 19 | Models (SalesData, InventoryItem, StaffSchedule), is_low_stock property, Sales API (CRUD + trends + hourly_pattern), Inventory API (CRUD + low_stock), Schedule API |
+| `predictive_core` | `tests/test_ml_predictions.py` | 10 | ML prediction endpoints (busy-hours, footfall, food-demand, inventory, staffing, revenue, dashboard, train) — pre-existing, updated for async train |
+| `insights_hub` | `tests.py` | 14 | Models (DailySummary, PDFReport), DailySummary API (CRUD + trends), PDFReport API (list + retrieve) |
+| `cloudinary_service` | `tests.py` | 14 | Serializer validation (file size, max files, resource types), Upload API (success, failure, unauth), Multi-upload API, Delete API — all Cloudinary calls mocked |
+| `twinengine_core` | `tests/__init__.py` | 63 | Settings (env vars, CORS, CSRF, security, channel layer, static files, logging), Health check (200/503), Throttle scopes (5 classes), Middleware (security headers, static skip), Commands (export/import), Deployment files |
+
+#### Bug Fixes Discovered by Tests
+- **RegisterView**: Fixed `validated_data['user']['username']` → `validated_data['username']` (serializer puts fields at top-level, not nested)
+- **RegisterView**: Removed non-existent `is_active` field from `UserProfile.objects.create()`
+- **RegisterView**: Added username uniqueness check before `User.objects.create_user()` to return 400 instead of IntegrityError
+- **RegisterView**: Changed default role from `'STAFF'` to `'WAITER'` (valid ROLE_CHOICES value)
+- **train endpoint test**: Updated to use `?sync=true` parameter for in-request execution (avoids Redis dependency in tests)

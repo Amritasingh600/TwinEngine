@@ -16,11 +16,36 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.db import connection
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularSwaggerView,
+    SpectacularRedocView,
+)
+from drf_spectacular.utils import extend_schema
+
+from apps.task_status import TaskStatusView
 
 
+@extend_schema(exclude=True)
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def health_check(request):
+    """Health check endpoint for load balancers and container orchestrators."""
+    status = {'status': 'healthy', 'version': '2.0.0'}
+    try:
+        connection.ensure_connection()
+        status['database'] = 'connected'
+    except Exception:
+        status['database'] = 'unavailable'
+        return Response(status, status=503)
+    return Response(status)
+
+
+@extend_schema(exclude=True)
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def api_root(request):
@@ -57,6 +82,8 @@ def api_root(request):
             'upload': '/api/upload/',
             'upload-multi': '/api/upload/multi/',
             'upload-delete': '/api/upload/delete/',
+            # Background task polling
+            'task-status': '/api/tasks/<task_id>/',
         }
     })
 
@@ -64,6 +91,9 @@ def api_root(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     
+    # Health check (for Azure App Service, Render, Docker)
+    path('api/health/', health_check, name='health-check'),
+
     # API Root
     path('api/', api_root, name='api-root'),
     
@@ -77,4 +107,12 @@ urlpatterns = [
     path('api/', include('apps.predictive_core.urls')),
     path('api/', include('apps.insights_hub.urls')),
     path('api/', include('apps.cloudinary_service.urls')),
+
+    # Task status polling
+    path('api/tasks/<str:task_id>/', TaskStatusView.as_view(), name='task-status'),
+
+    # API Documentation (Swagger / ReDoc)
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]

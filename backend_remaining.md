@@ -1,6 +1,8 @@
-# TwinEngine Hospitality Backend - Remaining Tasks
+# TwinEngine Hospitality Backend — Task Tracker
 
-This document outlines all remaining backend tasks with detailed implementation steps, code examples, and testing procedures.
+This document tracks all backend tasks for the TwinEngine Hospitality platform.
+
+> **Last Updated:** 4 March 2026 — All backend tasks completed.
 
 ---
 
@@ -345,238 +347,159 @@ This document outlines all remaining backend tasks with detailed implementation 
 
 ---
 
-## Remaining Tasks
+## Additional Completed Tasks (4 March 2026)
 
-## Task Summary
+### 12. API Documentation (Swagger) — ✅ COMPLETED
 
-| Priority | Task | Status | Est. Time |
-|----------|------|--------|-----------|
-| 🔴 High | Admin Panel Customization | ✅ COMPLETED | - |
-| 🔴 High | PostgreSQL/Neon Migration | ✅ COMPLETED | - |
-| 🔴 High | Environment & CORS Configuration | ✅ COMPLETED | - |
-| 🟠 Medium | Azure GPT-4o Report Generation | ✅ COMPLETED | - |
-| 🟠 Medium | Cloudinary Media Integration | ✅ COMPLETED | - |
-| 🟠 Medium | Demand Forecasting ML | ✅ COMPLETED | - |
-| 🟠 Medium | API Documentation (Swagger) | ⏳ Pending | 3-4 hours |
-| 🟠 Medium | Data Seeding & Fixtures | ✅ COMPLETED | - |
-| 🟢 Low | Unit & Integration Tests | ⏳ Pending | 8-10 hours |
-| 🟢 Low | Background Tasks (Celery) | ⏳ Pending | 4-5 hours |
-| 🟢 Low | Email Notifications | ⏳ Pending | 2-3 hours |
-| 🟢 Low | Rate Limiting & Throttling | ⏳ Pending | 2-3 hours |
-| 🟢 Low | Logging & Error Monitoring | ⏳ Pending | 3-4 hours |
-| 🟢 Low | Deployment Guide | ⏳ Pending | 2-3 hours |
+**Completed On:** March 4, 2026
 
-**Total Remaining:** 6 tasks | **Est. Time:** 23-32 hours
+- Installed and configured `drf-spectacular` for OpenAPI 3.0 schema generation
+- Decorated all views across 6 apps with `@extend_schema` (71 paths, 120 operations)
+- Swagger UI: `/api/docs/` | ReDoc: `/api/redoc/` | Schema: `/api/schema/`
+- Schema validation: **0 errors, 0 warnings**
 
 ---
 
-## Table of Contents
+### 13. Celery Background Tasks — ✅ COMPLETED
 
-### High Priority (Must Have)
-1. ~~PostgreSQL/Neon Migration~~ — ✅ COMPLETED
+**Completed On:** March 4, 2026
 
-### Medium Priority (Should Have)
-2. ~~Demand Forecasting ML~~ — ✅ COMPLETED
-3. [API Documentation (Swagger)](#3-api-documentation-swagger)
+| Task | Module | Description |
+|------|--------|-------------|
+| `train_models_for_outlet` | `predictive_core.tasks` | Retrain all 6 ML models (async) |
+| `train_all_outlets` | `predictive_core.tasks` | Nightly cron: all active outlets |
+| `send_inventory_alerts` | `predictive_core.tasks` | Email low-stock items |
+| `send_inventory_alerts_all` | `predictive_core.tasks` | Morning cron: all outlets |
+| `generate_report_task` | `insights_hub.tasks` | Full report pipeline (async) |
+| `email_report_task` | `insights_hub.tasks` | Email report link |
 
-### Lower Priority (Nice to Have)
-4. [Unit & Integration Tests](#4-unit--integration-tests)
-5. [Background Tasks with Celery](#5-background-tasks-with-celery)
-6. [Email Notifications](#6-email-notifications)
-7. [Rate Limiting & Throttling](#7-rate-limiting--throttling)
-8. [Deployment Guide](#8-deployment-guide)
-
----
-
-## HIGH PRIORITY TASKS
-
----
-
-## 1. PostgreSQL/Neon Migration — ✅ COMPLETED
-
-**Priority:** 🔴 High  
-**Completed On:** March 2, 2026  
-**Outcome:** Database migrated to Neon PostgreSQL via `DATABASE_URL` in settings.py
-
-### Purpose
-Migrate from SQLite to production PostgreSQL (Neon serverless).
-All tooling is already in place — just needs the Neon connection string.
-
-### When Ready:
-```bash
-# 1. Export current data
-python manage.py export_data --include-auth -o pre_migration_backup.json
-
-# 2. Set DATABASE_URL in .env
-DATABASE_URL=postgresql://user:pass@ep-xxx.region.aws.neon.tech/twinengine?sslmode=require
-
-# 3. Update settings.py DATABASES block to use dj_database_url.config()
-
-# 4. Migrate and import
-python manage.py migrate
-python manage.py import_data pre_migration_backup.json
-```
-
----
-
-## MEDIUM PRIORITY TASKS
-
----
-
-## 2. Demand Forecasting ML — ✅ COMPLETED
-
-**Priority:** 🟡 Medium  
-**Completed On:** March 3, 2026
-
-### What Was Implemented:
-- 6 ML models: BusyHoursPredictor, FootfallForecaster, FoodDemandPredictor, InventoryPredictor, StaffingOptimizer, RevenueForecaster
-- PredictionService facade for unified access
-- 8 REST API endpoints (busy-hours, footfall, food-demand, inventory, staffing, revenue, dashboard, train)
-- `train_models` management command
-- 10 unit tests (all passing)
-- Feature engineering pipeline from SalesData
-- Dependencies: scikit-learn, pandas, numpy, joblib
-
-### Files Created:
-- `apps/predictive_core/ml/` — 9 files (models, feature engineering, prediction service)
-- `apps/predictive_core/management/commands/train_models.py`
-- `apps/predictive_core/tests/test_ml_predictions.py`
-- `demo_predictions.py`
-
----
-
-## 3. API Documentation (Swagger)
-
-**Priority:** 🟡 Medium  
-**Estimated Time:** 2-3 hours  
-**Dependencies:** `drf-spectacular`
-
-### Implementation
-```bash
-pip install drf-spectacular
-```
-
-```python
-# urls.py
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-
-urlpatterns = [
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-]
-```
-
----
-
-## LOWER PRIORITY TASKS
-
----
-
-## 4. Unit & Integration Tests
-
-**Priority:** 🟢 Lower  
-**Estimated Time:** 4-6 hours
+- Beat schedule: nightly model retraining (02:00), morning inventory alerts (07:00)
+- Redis broker, `django-db` result backend, `DatabaseScheduler`
+- Task status polling: `GET /api/tasks/<task_id>/`
+- Views support `?sync=true` for backward-compatible synchronous execution
 
 ```bash
-python manage.py test
-coverage run manage.py test && coverage report
+celery -A twinengine_core worker --loglevel=info
+celery -A twinengine_core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 ```
 
 ---
 
-## 5. Background Tasks with Celery
+### 14. Email Notifications — ✅ COMPLETED
 
-**Priority:** 🟢 Lower  
-**Estimated Time:** 4-5 hours
+**Completed On:** March 4, 2026
 
-For async processing of reports and daily summaries.
+- Backend: Mailtrap SMTP sandbox (`sandbox.smtp.mailtrap.io:2525`)
+- HTML templates: `templates/emails/inventory_alert.html`, `templates/emails/report_ready.html`
+- Triggered by Celery tasks: inventory alerts + report completion notifications
+
+---
+
+### 15. Rate Limiting & Throttling — ✅ COMPLETED
+
+**Completed On:** March 4, 2026
+
+| Scope | Rate | Applied To |
+|-------|------|------------|
+| `anon` | 30/min | All unauthenticated requests |
+| `user` | 120/min | All authenticated requests |
+| `auth` | 10/min | Login, register, password change |
+| `predictions` | 60/min | All prediction endpoints |
+| `reports` | 10/min | Report generation |
+| `uploads` | 20/min | Cloudinary uploads |
+| `training` | 5/min | ML model retraining |
+
+- 5 custom `SimpleRateThrottle` subclasses in `twinengine_core/throttles.py`
+- `django-axes`: Lock after 5 failed logins, 30 min cooloff (username + IP)
+- Audit logging middleware: `logs/audit.log` (user, method, path, status, duration, IP)
+- Security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`
+- Password minimum length: 10, session timeout: 2 hours
+
+---
+
+### 16. Deployment Configuration — ✅ COMPLETED
+
+**Completed On:** March 4, 2026
+
+- **Docker**: Multi-stage Dockerfile, `docker-compose.yml` (PostgreSQL + Redis + Django + Celery + Beat)
+- **Azure**: Bicep IaC (`.azure/infra.bicep`), deploy script, App Service + PostgreSQL + Redis + ACR
+- **Render**: `render.yaml` Blueprint, `build.sh`, `Procfile`
+- **CI/CD**: GitHub Actions — `ci.yml` (lint → test → build), `deploy-azure.yml` (build → push → deploy)
+- Health check: `GET /api/health/` → `{"status": "healthy", "version": "2.0.0", "database": "connected"}`
+- Full guide: `DEPLOYMENT.md`
+
+---
+
+### 17. Comprehensive Testing — ✅ COMPLETED
+
+**Completed On:** March 4, 2026
+
+| App | Tests | Coverage |
+|-----|-------|---------|
+| `hospitality_group` | 33 | Models, Permissions, Auth API, Brand/Outlet CRUD |
+| `order_engine` | 29 | Models, Status transitions, Order/Payment API, Signals |
+| `layout_twin` | 16 | Models, Node/Flow API, Status updates |
+| `predictive_core` | 29 | Models, Sales/Inventory/Schedule API, ML predictions |
+| `insights_hub` | 14 | Models, Summary/Report API |
+| `cloudinary_service` | 14 | Serializer validation, Upload/Delete API (mocked) |
+| `twinengine_core` | 63 | Settings, CORS, Security, Health check, Throttles, Middleware |
+| **Total** | **198** | All passing |
 
 ```bash
-pip install celery redis
-celery -A twinengine_core worker -B -l info
+DATABASE_URL='sqlite:///db.sqlite3' python manage.py test --verbosity=2
 ```
-
----
-
-## 6. Email Notifications
-
-**Priority:** 🟢 Lower  
-**Estimated Time:** 2-3 hours
-
-Email alerts for daily reports, low inventory, and long wait times.
-
----
-
-## 7. Rate Limiting & Throttling
-
-**Priority:** 🟢 Lower  
-**Estimated Time:** 1-2 hours
-
-```python
-REST_FRAMEWORK = {
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',
-        'user': '1000/hour'
-    }
-}
-```
-
----
-
-## 8. Deployment Guide
-
-**Priority:** 🟢 Lower  
-**Estimated Time:** 2-3 hours
-
-### Render (Backend)
-- Start command: `daphne -b 0.0.0.0 -p $PORT twinengine_core.asgi:application`
-- Build script: `build.sh` (already created)
-- Procfile ready
-
-### Vercel (Frontend)
-- Configure environment variables for API URL
 
 ---
 
 ## Summary Table
 
-| # | Task | Priority | Status | Est. Time |
-|---|------|----------|--------|-----------|
-| ✅ | WebSocket Consumers | High | Done | 4h |
-| ✅ | Architecture Setup | High | Done | 4h |
-| ✅ | JWT Authentication | High | Done | 3-4h |
-| ✅ | Table Status Auto-Update | High | Done | 2-3h |
-| ✅ | Admin Panel Customization | High | Done | 2-3h |
-| ✅ | Environment & CORS Config | High | Done | 1-2h |
-| ✅ | Cloudinary Media Integration | Medium | Done | 2-3h |
-| ✅ | Azure GPT-4o Report Pipeline | Medium | Done | 4-6h |
-| ✅ | Synthetic Data Generator | Medium | Done | 2-3h |
-| ✅ | PostgreSQL/Neon Migration | 🔴 High | Done | 2-3h |
-| 2 | Demand Forecasting ML | 🟡 Medium | ✅ Done | 6-8h |
-| 3 | API Documentation | 🟡 Medium | Pending | 2-3h |
-| 4 | Unit & Integration Tests | 🟢 Lower | Pending | 4-6h |
-| 5 | Celery Background Tasks | 🟢 Lower | Pending | 4-5h |
-| 6 | Email Notifications | 🟢 Lower | Pending | 2-3h |
-| 7 | Rate Limiting | 🟢 Lower | Pending | 1-2h |
-| 8 | Deployment Guide | 🟢 Lower | Pending | 2-3h |
+| # | Task | Priority | Status |
+|---|------|----------|--------|
+| 1 | WebSocket Consumers | 🔴 High | ✅ Done |
+| 2 | Architecture Setup | 🔴 High | ✅ Done |
+| 3 | JWT Authentication | 🔴 High | ✅ Done |
+| 4 | Table Status Auto-Update | 🔴 High | ✅ Done |
+| 5 | Admin Panel Customization | 🔴 High | ✅ Done |
+| 6 | Environment & CORS Config | 🔴 High | ✅ Done |
+| 7 | PostgreSQL/Neon Migration | 🔴 High | ✅ Done |
+| 8 | Cloudinary Media Integration | 🟠 Medium | ✅ Done |
+| 9 | Azure GPT-4o Report Pipeline | 🟠 Medium | ✅ Done |
+| 10 | Synthetic Data Generator | 🟠 Medium | ✅ Done |
+| 11 | Demand Forecasting ML | 🟠 Medium | ✅ Done |
+| 12 | API Documentation (Swagger) | 🟠 Medium | ✅ Done |
+| 13 | Celery Background Tasks | 🟢 Low | ✅ Done |
+| 14 | Email Notifications | 🟢 Low | ✅ Done |
+| 15 | Rate Limiting & Throttling | 🟢 Low | ✅ Done |
+| 16 | Deployment Configuration | 🟢 Low | ✅ Done |
+| 17 | Comprehensive Testing (198) | 🟢 Low | ✅ Done |
 
-**Total Estimated Time:** ~16-24 hours remaining (11 completed, 6 pending)
+**All 17 backend tasks completed.**
 
 ---
 
-## Quick Start Checklist
+## Quick Start
 
-### To get MVP running:
-- [x] JWT Authentication System ✅
-- [x] Table Status Auto-Update Logic ✅
-- [x] Admin Panel Customization ✅
-- [x] Environment & CORS Configuration ✅
-- [x] Cloudinary Media Integration ✅
-- [x] Azure GPT-4o Report Pipeline ✅
-- [x] Synthetic Data Generator ✅
-- [x] PostgreSQL/Neon Migration ✅
-- [x] Demand Forecasting ML ✅
+```bash
+# 1. Setup
+cd twin_engine_backend
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env  # configure env vars
 
-### For production release add:
-- [ ] Task 3: API Docs (Swagger)
-- [ ] Task 8: Deployment Guide
+# 2. Database
+python manage.py migrate
+python manage.py generate_synthetic_data
+
+# 3. Run
+python manage.py runserver
+
+# 4. Optional: Celery
+celery -A twinengine_core worker --loglevel=info
+celery -A twinengine_core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+# 5. Test
+DATABASE_URL='sqlite:///db.sqlite3' python manage.py test --verbosity=2
+
+# 6. API Docs
+open http://127.0.0.1:8000/api/docs/
+```

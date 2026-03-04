@@ -2,6 +2,7 @@ from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiTypes
 from .models import ServiceNode, ServiceFlow
 from .serializers import (
     ServiceNodeSerializer, ServiceNodeListSerializer, ServiceNodeDetailSerializer,
@@ -9,6 +10,14 @@ from .serializers import (
 )
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Layout - Nodes'], summary='List all service nodes'),
+    create=extend_schema(tags=['Layout - Nodes'], summary='Create a service node'),
+    retrieve=extend_schema(tags=['Layout - Nodes'], summary='Retrieve a service node'),
+    update=extend_schema(tags=['Layout - Nodes'], summary='Update a service node'),
+    partial_update=extend_schema(tags=['Layout - Nodes'], summary='Partial update a service node'),
+    destroy=extend_schema(tags=['Layout - Nodes'], summary='Delete a service node'),
+)
 class ServiceNodeViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Service Nodes (Tables, Kitchen Stations, etc.).
@@ -35,6 +44,7 @@ class ServiceNodeViewSet(viewsets.ModelViewSet):
             return ServiceNodeDetailSerializer
         return ServiceNodeSerializer
     
+    @extend_schema(tags=['Layout - Nodes'], summary='Update node status (color)')
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
         """Update the status (color) of a service node."""
@@ -58,6 +68,9 @@ class ServiceNodeViewSet(viewsets.ModelViewSet):
             'updated': True
         })
     
+    @extend_schema(tags=['Layout - Nodes'], summary='Get order history for a table', parameters=[
+        OpenApiParameter('limit', OpenApiTypes.INT, description='Max results (default 20)'),
+    ])
     @action(detail=True, methods=['get'])
     def order_history(self, request, pk=None):
         """Get order history for this table."""
@@ -71,6 +84,9 @@ class ServiceNodeViewSet(viewsets.ModelViewSet):
         serializer = OrderTicketSerializer(orders, many=True)
         return Response(serializer.data)
     
+    @extend_schema(tags=['Layout - Nodes'], summary='Get nodes by outlet', parameters=[
+        OpenApiParameter('outlet_id', OpenApiTypes.INT, description='Outlet ID', required=True),
+    ], responses={200: ServiceNodeListSerializer(many=True)})
     @action(detail=False, methods=['get'])
     def by_outlet(self, request):
         """Get all nodes for a specific outlet."""
@@ -83,6 +99,14 @@ class ServiceNodeViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Layout - Flows'], summary='List all service flows'),
+    create=extend_schema(tags=['Layout - Flows'], summary='Create a service flow'),
+    retrieve=extend_schema(tags=['Layout - Flows'], summary='Retrieve a service flow'),
+    update=extend_schema(tags=['Layout - Flows'], summary='Update a service flow'),
+    partial_update=extend_schema(tags=['Layout - Flows'], summary='Partial update a service flow'),
+    destroy=extend_schema(tags=['Layout - Flows'], summary='Delete a service flow'),
+)
 class ServiceFlowViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Service Flows (connections between nodes).
@@ -100,6 +124,9 @@ class ServiceFlowViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['source_node', 'target_node', 'flow_type', 'is_active']
     
+    @extend_schema(tags=['Layout - Flows'], summary='Get full floor graph (nodes + flows)', parameters=[
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+    ])
     @action(detail=False, methods=['get'])
     def graph(self, request):
         """Get full restaurant floor graph (nodes + flows) for visualization."""

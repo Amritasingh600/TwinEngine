@@ -10,6 +10,7 @@ from django.db.models import Sum, Avg, Count
 from django.utils import timezone
 from django.conf import settings
 from datetime import datetime, timedelta
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiTypes
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -29,10 +30,19 @@ from .serializers import (
 )
 from .services.data_collector import collect_raw_data
 from .services.gpt_report import generate_report_with_gpt, generate_report_fallback
+from twinengine_core.throttles import ReportRateThrottle
 
 logger = logging.getLogger(__name__)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Reports'], summary='List all daily summaries'),
+    create=extend_schema(tags=['Reports'], summary='Create a daily summary'),
+    retrieve=extend_schema(tags=['Reports'], summary='Retrieve a daily summary'),
+    update=extend_schema(tags=['Reports'], summary='Update a daily summary'),
+    partial_update=extend_schema(tags=['Reports'], summary='Partial update a daily summary'),
+    destroy=extend_schema(tags=['Reports'], summary='Delete a daily summary'),
+)
 class DailySummaryViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Daily Summaries.
@@ -57,6 +67,10 @@ class DailySummaryViewSet(viewsets.ModelViewSet):
             return DailySummaryListSerializer
         return DailySummarySerializer
     
+    @extend_schema(tags=['Reports'], summary='Get performance trends over time', parameters=[
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+        OpenApiParameter('days', OpenApiTypes.INT, description='Number of days to look back (default 30)'),
+    ])
     @action(detail=False, methods=['get'])
     def trends(self, request):
         """Get performance trends over time."""
@@ -85,6 +99,10 @@ class DailySummaryViewSet(viewsets.ModelViewSet):
         
         return Response(list(daily))
     
+    @extend_schema(tags=['Reports'], summary='Compare performance across outlets', parameters=[
+        OpenApiParameter('brand', OpenApiTypes.INT, description='Filter by brand ID'),
+        OpenApiParameter('days', OpenApiTypes.INT, description='Number of days to compare (default 7)'),
+    ])
     @action(detail=False, methods=['get'])
     def compare(self, request):
         """Compare performance across outlets."""
@@ -113,6 +131,9 @@ class DailySummaryViewSet(viewsets.ModelViewSet):
         
         return Response(list(by_outlet))
     
+    @extend_schema(tags=['Reports'], summary="Get today's summaries", parameters=[
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+    ], responses={200: DailySummarySerializer(many=True)})
     @action(detail=False, methods=['get'])
     def today(self, request):
         """Get today's summary (or generate one)."""
@@ -127,6 +148,14 @@ class DailySummaryViewSet(viewsets.ModelViewSet):
         return Response(summaries)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Reports'], summary='List all PDF reports'),
+    create=extend_schema(tags=['Reports'], summary='Create a PDF report record'),
+    retrieve=extend_schema(tags=['Reports'], summary='Retrieve a PDF report'),
+    update=extend_schema(tags=['Reports'], summary='Update a PDF report'),
+    partial_update=extend_schema(tags=['Reports'], summary='Partial update a PDF report'),
+    destroy=extend_schema(tags=['Reports'], summary='Delete a PDF report'),
+)
 class PDFReportViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing PDF Reports.
@@ -142,21 +171,28 @@ class PDFReportViewSet(viewsets.ModelViewSet):
     filterset_fields = ['outlet', 'report_type', 'status', 'outlet__brand']
     ordering_fields = ['start_date', 'created_at']
     ordering = ['-created_at']
+    throttle_classes = [ReportRateThrottle]
     
     def get_serializer_class(self):
         if self.action == 'list':
             return PDFReportListSerializer
         return PDFReportSerializer
     
+    @extend_schema(
+        tags=['Reports'],
+        summary='Generate AI report (async via Celery or sync)',
+        request=ReportGenerateSerializer,
+        responses={202: PDFReportSerializer, 201: PDFReportSerializer, 400: None, 500: None},
+    )
     @action(detail=False, methods=['post'])
     def generate(self, request):
         """
-        Generate Report — Full Pipeline:
-          1. Collect raw operational data from DB
-          2. Send to Azure GPT-4o for formatted analysis
-          3. Build a professional PDF from GPT output
-          4. Upload PDF to Cloudinary
-          5. Save report record and return cloudinary link
+        Generate Report — Full Pipeline (defaults to ASYNC via Celery):
+          1. Create a GENERATING report record
+          2. Dispatch Celery task (data → GPT → PDF → Cloudinary → email)
+          3. Return 202 with task_id for polling
+
+        Pass ?sync=true to run the entire pipeline in-request (original behaviour).
         """
         serializer = ReportGenerateSerializer(data=request.data)
         if not serializer.is_valid():
@@ -181,6 +217,23 @@ class PDFReportViewSet(viewsets.ModelViewSet):
             generated_by='GPT-4o',
         )
 
+        # ── Check if caller wants synchronous execution ──
+        run_sync = request.query_params.get('sync', 'false').lower() == 'true'
+
+        if not run_sync:
+            # Dispatch to Celery
+            from .tasks import generate_report_task
+            task = generate_report_task.delay(report.pk)
+            return Response(
+                {
+                    **PDFReportSerializer(report).data,
+                    "task_id": task.id,
+                    "poll_url": f"/api/tasks/{task.id}/",
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+        # ── Synchronous path (backward compat / testing) ──
         try:
             # ── STEP 1: Collect raw data from all models ──
             logger.info("Step 1: Collecting raw data for %s (%s -> %s)", outlet.name, start_date, end_date)
@@ -489,6 +542,15 @@ class DailyReportView(APIView):
     Response: { report_text, insights, recommendations, cloudinary_url }
     """
     
+    @extend_schema(
+        tags=['Reports'],
+        summary='Get latest AI report for a date',
+        parameters=[
+            OpenApiParameter('date', OpenApiTypes.DATE, description='Report date (YYYY-MM-DD, default today)'),
+            OpenApiParameter('outlet', OpenApiTypes.INT, description='Outlet ID'),
+        ],
+        responses={200: DailyReportResponseSerializer, 404: None},
+    )
     def get(self, request):
         date_str = request.query_params.get('date')
         outlet_id = request.query_params.get('outlet')

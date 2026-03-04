@@ -1,0 +1,66 @@
+# Docker
+.dockerignore
+Dockerfile
+docker-compose*.yml
+
+# Version control
+.git
+.gitignore
+
+# Virtual environments
+venv/
+env/
+.venv/
+*/venv/
+
+# Environment files (secrets)
+.env
+.env.local
+.env.*.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.py[cod]
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Documentation
+*.md
+!README.md
+
+# Development files
+db.sqlite3
+db.sqlite3-journal
+Makefile
+
+# Logs (will be created at runtime)
+logs/*.log
+
+# ML model artifacts (downloaded/trained at runtime)
+**/ml_models/*.joblib
+
+# Media (served from Cloudinary in production)
+media/
+
+# Backup files
+backup_*.json
+*.bak

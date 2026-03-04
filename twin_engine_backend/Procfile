@@ -1,4 +1,6 @@
-# Procfile for Render / Heroku deployment
+# Procfile — Render / Heroku / Azure App Service
 # Uses Daphne (ASGI) for WebSocket support
 
-web: daphne -b 0.0.0.0 -p $PORT twinengine_core.asgi:application
+web: daphne -b 0.0.0.0 -p ${PORT:-8000} --proxy-headers twinengine_core.asgi:application
+worker: celery -A twinengine_core worker --loglevel=info --concurrency=2
+beat: celery -A twinengine_core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler

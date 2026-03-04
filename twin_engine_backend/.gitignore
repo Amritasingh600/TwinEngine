@@ -48,4 +48,10 @@ htmlcov/
 # Distribution
 *.egg-info/
 dist/
+
+# Docker
+docker-compose.override.yml
+
+# Azure deployment secrets (keep infra.bicep, ignore filled parameters)
+.azure/*.parameters.local.json
 build/

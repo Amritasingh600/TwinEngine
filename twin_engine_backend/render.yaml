@@ -1,0 +1,93 @@
+# ==============================================================
+# TwinEngine Backend — Render Blueprint (render.yaml)
+# ==============================================================
+# Deploy on Render:  https://render.com/docs/blueprint-spec
+# Usage: Connect your GitHub repo → Render auto-detects this file
+# ==============================================================
+
+services:
+  # ── Web Service (Daphne ASGI) ──────────────────────────────
+  - type: web
+    name: twinengine-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: ./build.sh
+    startCommand: daphne -b 0.0.0.0 -p $PORT --proxy-headers twinengine_core.asgi:application
+    healthCheckPath: /api/health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: DEBUG
+        value: "False"
+      - key: DJANGO_SETTINGS_MODULE
+        value: twinengine_core.settings
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: twinengine-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: twinengine-redis
+          property: connectionString
+      # External services — set manually in Render dashboard
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: AZURE_OPENAI_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+
+  # ── Background Worker (Celery) ─────────────────────────────
+  - type: worker
+    name: twinengine-worker
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A twinengine_core worker --loglevel=info --concurrency=2
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: DJANGO_SETTINGS_MODULE
+        value: twinengine_core.settings
+      - key: DATABASE_URL
+        fromDatabase:
+          name: twinengine-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: twinengine-redis
+          property: connectionString
+
+# ── Databases ──────────────────────────────────────────────────
+databases:
+  - name: twinengine-db
+    plan: free
+    databaseName: twinengine
+    user: twinengine
+    region: oregon
+
+# Note: Render Redis requires a paid plan in production.
+# For free tier, use an external Redis provider (e.g., Upstash free tier)
+# and set REDIS_URL manually.

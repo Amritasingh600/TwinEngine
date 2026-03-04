@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 from .models import SalesData, InventoryItem, StaffSchedule
 
 
@@ -84,6 +85,7 @@ class StaffScheduleSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at']
     
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_staff_name(self, obj):
         if obj.staff and obj.staff.user:
             return obj.staff.user.get_full_name() or obj.staff.user.username

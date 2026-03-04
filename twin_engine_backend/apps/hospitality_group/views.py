@@ -7,15 +7,30 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiTypes
 from .models import Brand, Outlet, UserProfile
 from .serializers import (
     BrandSerializer, BrandListSerializer,
     OutletSerializer, OutletListSerializer,
     UserProfileSerializer, UserProfileCreateSerializer
 )
+from .schema_serializers import (
+    UserProfileUpdateRequestSerializer,
+    ChangePasswordRequestSerializer,
+    MessageResponseSerializer,
+)
 from .permissions import IsManager, IsManagerOrReadOnly, IsOutletUser
+from twinengine_core.throttles import AuthRateThrottle
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Brands'], summary='List all brands'),
+    create=extend_schema(tags=['Brands'], summary='Create a brand'),
+    retrieve=extend_schema(tags=['Brands'], summary='Retrieve a brand'),
+    update=extend_schema(tags=['Brands'], summary='Update a brand'),
+    partial_update=extend_schema(tags=['Brands'], summary='Partial update a brand'),
+    destroy=extend_schema(tags=['Brands'], summary='Delete a brand'),
+)
 class BrandViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Brands (Restaurant Groups/Chains).
@@ -41,6 +56,7 @@ class BrandViewSet(viewsets.ModelViewSet):
             return BrandListSerializer
         return BrandSerializer
     
+    @extend_schema(tags=['Brands'], summary='List outlets for a brand', responses={200: OutletListSerializer(many=True)})
     @action(detail=True, methods=['get'])
     def outlets(self, request, pk=None):
         """Get all outlets for this brand."""
@@ -49,6 +65,7 @@ class BrandViewSet(viewsets.ModelViewSet):
         serializer = OutletListSerializer(outlets, many=True)
         return Response(serializer.data)
     
+    @extend_schema(tags=['Brands'], summary='Get brand statistics')
     @action(detail=True, methods=['get'])
     def stats(self, request, pk=None):
         """Get statistics for this brand."""
@@ -62,6 +79,14 @@ class BrandViewSet(viewsets.ModelViewSet):
         })
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Outlets'], summary='List all outlets'),
+    create=extend_schema(tags=['Outlets'], summary='Create an outlet'),
+    retrieve=extend_schema(tags=['Outlets'], summary='Retrieve an outlet'),
+    update=extend_schema(tags=['Outlets'], summary='Update an outlet'),
+    partial_update=extend_schema(tags=['Outlets'], summary='Partial update an outlet'),
+    destroy=extend_schema(tags=['Outlets'], summary='Delete an outlet'),
+)
 class OutletViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Outlets (Individual Restaurant Locations).
@@ -87,6 +112,7 @@ class OutletViewSet(viewsets.ModelViewSet):
             return OutletListSerializer
         return OutletSerializer
     
+    @extend_schema(tags=['Outlets'], summary='List staff for an outlet', responses={200: UserProfileSerializer(many=True)})
     @action(detail=True, methods=['get'])
     def staff(self, request, pk=None):
         """Get all staff for this outlet."""
@@ -95,6 +121,7 @@ class OutletViewSet(viewsets.ModelViewSet):
         serializer = UserProfileSerializer(staff, many=True)
         return Response(serializer.data)
     
+    @extend_schema(tags=['Outlets'], summary='List tables for an outlet')
     @action(detail=True, methods=['get'])
     def tables(self, request, pk=None):
         """Get all tables (ServiceNodes) for this outlet."""
@@ -104,6 +131,7 @@ class OutletViewSet(viewsets.ModelViewSet):
         serializer = ServiceNodeListSerializer(tables, many=True)
         return Response(serializer.data)
     
+    @extend_schema(tags=['Outlets'], summary='Get current floor status summary')
     @action(detail=True, methods=['get'])
     def floor_status(self, request, pk=None):
         """Get current floor status summary."""
@@ -122,6 +150,14 @@ class OutletViewSet(viewsets.ModelViewSet):
         })
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Staff'], summary='List all staff profiles'),
+    create=extend_schema(tags=['Staff'], summary='Create a staff profile'),
+    retrieve=extend_schema(tags=['Staff'], summary='Retrieve a staff profile'),
+    update=extend_schema(tags=['Staff'], summary='Update a staff profile'),
+    partial_update=extend_schema(tags=['Staff'], summary='Partial update a staff profile'),
+    destroy=extend_schema(tags=['Staff'], summary='Delete a staff profile'),
+)
 class UserProfileViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing User Profiles (Restaurant Staff).
@@ -156,6 +192,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 # AUTHENTICATION VIEWS
 # ============================================================================
 
+@extend_schema(tags=['Auth'], summary='Register a new user with profile')
 class RegisterView(generics.CreateAPIView):
     """
     Register a new user with profile.
@@ -171,16 +208,24 @@ class RegisterView(generics.CreateAPIView):
     }
     """
     permission_classes = [AllowAny]
+    throttle_classes = [AuthRateThrottle]
     serializer_class = UserProfileCreateSerializer
     
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Extract user data
-        username = serializer.validated_data['user']['username']
-        email = serializer.validated_data['user']['email']
-        password = serializer.validated_data['user']['password']
+        # Extract user data (fields are at top-level in validated_data)
+        username = serializer.validated_data['username']
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
+
+        # Check username uniqueness
+        if User.objects.filter(username=username).exists():
+            return Response(
+                {'username': ['A user with that username already exists.']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Validate password
         try:
@@ -202,9 +247,8 @@ class RegisterView(generics.CreateAPIView):
         profile = UserProfile.objects.create(
             user=user,
             outlet=serializer.validated_data['outlet'],
-            role=serializer.validated_data.get('role', 'STAFF'),
+            role=serializer.validated_data.get('role', 'WAITER'),
             phone=serializer.validated_data.get('phone', ''),
-            is_active=serializer.validated_data.get('is_active', True)
         )
         
         return Response(
@@ -222,6 +266,7 @@ class UserProfileView(APIView):
     """
     permission_classes = [IsAuthenticated]
     
+    @extend_schema(tags=['Auth'], summary='Get current user profile', responses={200: UserProfileSerializer})
     def get(self, request):
         """Get current user profile."""
         try:
@@ -234,6 +279,7 @@ class UserProfileView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
     
+    @extend_schema(tags=['Auth'], summary='Update current user profile', request=UserProfileUpdateRequestSerializer, responses={200: UserProfileSerializer})
     def put(self, request):
         """Update current user profile."""
         try:
@@ -267,7 +313,9 @@ class ChangePasswordView(APIView):
     }
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [AuthRateThrottle]
     
+    @extend_schema(tags=['Auth'], summary='Change password', request=ChangePasswordRequestSerializer, responses={200: MessageResponseSerializer})
     def post(self, request):
         user = request.user
         old_password = request.data.get('old_password')

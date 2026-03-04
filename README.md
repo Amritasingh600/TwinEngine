@@ -130,11 +130,11 @@ TwinEngine Hospitality provides an accessible, modular AI-Powered Digital Twin p
 
 - **Intuitive 3D Navigation:** Simple mouse-based controls for zooming and rotating the floor map, making it accessible to non-technical staff.
 - **Colour-Coded Status Alerts:** Standardised colors for clear communication:
-  - 🔵 BLUE: Available / Free
-  - 🔴 RED: Needs Attention / Exceeded Wait
-  - 🟢 GREEN: Order Delivered / Happy
-  - 🟡 YELLOW: Waiting / In Progress
-  - ⚫ GREY: Reserved / Inactive
+  - 🔵 BLUE: Empty / Ready — Table is free and available
+  - 🔴 RED: Occupied - Waiting — Food not yet served
+  - 🟢 GREEN: Occupied - Served — Food served, customer eating
+  - 🟡 YELLOW: Issue / Delay — Wait exceeded 15 minutes
+  - ⚫ GREY: Maintenance / Reserved — Table not available
 - **Simplified Language:** GPT-4o reports will use professional but simple terminology to ensure clarity for all stakeholders.
 
 ---
@@ -197,11 +197,11 @@ TwinEngine follows a **Layered Cloud Architecture** designed to separate AI proc
 
 | App | Purpose | Key Models |
 |-----|---------|------------|
-| `hospitality_group` | Multi-tenant SaaS layer | Brand, Outlet, UserProfile |
-| `layout_twin` | 3D Digital Twin configuration | ServiceNode, ServiceFlow |
-| `order_engine` | Real-time order tracking | OrderTicket, PaymentLog |
-| `predictive_core` | AI predictions & forecasting | SalesData, InventoryItem, StaffSchedule |
-| `insights_hub` | Reporting & analytics | DailySummary, PDFReport |
+| `hospitality_group` | Multi-tenant SaaS layer (5 roles: Manager/Waiter/Chef/Host/Cashier) | Brand, Outlet, UserProfile |
+| `layout_twin` | 3D Digital Twin configuration (5 node types, 4 flow types) | ServiceNode, ServiceFlow |
+| `order_engine` | Real-time order lifecycle tracking with signal-based table status | OrderTicket, PaymentLog |
+| `predictive_core` | AI/ML predictions (6 models) & data storage | SalesData, InventoryItem, StaffSchedule |
+| `insights_hub` | GPT-4o reporting & daily analytics | DailySummary, PDFReport |
 
 ### 8.3 Authentication System
 
@@ -246,15 +246,49 @@ Run `python manage.py create_demo_users` to create:
 
 ### 8.4 API Specifications
 
-| Endpoint | Method | Purpose | Response |
-|----------|--------|---------|----------|
-| `/api/brands/` | GET/POST | Brand management | `[{id, name, brand_code, tier}]` |
-| `/api/outlets/` | GET/POST | Fetch/create outlets | `[{id, name, address, status}]` |
-| `/api/staff/` | GET/POST | Staff profile management | `[{id, user, outlet, role}]` |
-| `/api/nodes/` | GET/POST | Fetch all service nodes for 3D rendering | `[{id, name, status, position}]` |
-| `/api/orders/` | GET/POST | Order lifecycle management | `{id, table, status, items, total}` |
-| `/api/reports/generate/` | POST | Generate AI operational report | `{report_url, summary}` |
-| `/api/predictions/demand/` | GET | Get demand forecast | `{date, predicted_covers, confidence}` |
+#### Core CRUD
+| Endpoint | Method | Purpose |
+|----------|--------|---------|  
+| `/api/brands/` | GET/POST | Brand management |
+| `/api/outlets/` | GET/POST | Outlet management |
+| `/api/staff/` | GET/POST | Staff profile management |
+| `/api/nodes/` | GET/POST | Service nodes for 3D rendering |
+| `/api/flows/` | GET/POST | Service flow paths |
+| `/api/orders/` | GET/POST | Order lifecycle management |
+| `/api/payments/` | GET/POST | Payment transactions |
+| `/api/sales-data/` | GET/POST | Sales data for ML |
+| `/api/inventory/` | GET/POST | Inventory management |
+| `/api/schedules/` | GET/POST | Staff scheduling |
+| `/api/summaries/` | GET/POST | Daily summaries |
+
+#### AI & Predictions
+| Endpoint | Method | Purpose |
+|----------|--------|---------|  
+| `/api/predictions/busy-hours/` | GET | Hourly order volume forecast |
+| `/api/predictions/footfall/` | GET | Guest count forecast |
+| `/api/predictions/food-demand/` | GET | Category demand forecast |
+| `/api/predictions/inventory-alerts/` | GET | Inventory depletion alerts |
+| `/api/predictions/staffing/` | GET | Staff recommendations per shift |
+| `/api/predictions/revenue/` | GET | Revenue forecast |
+| `/api/predictions/dashboard/` | GET | Combined predictions dashboard |
+| `/api/predictions/train/` | POST | Trigger ML model retraining |
+| `/api/reports/generate/` | POST | Generate AI PDF report (GPT-4o) |
+
+#### Media & Files
+| Endpoint | Method | Purpose |
+|----------|--------|---------|  
+| `/api/upload/` | POST | Single file upload to Cloudinary |
+| `/api/upload/multi/` | POST | Multi-file upload (max 10) |
+| `/api/upload/delete/` | DELETE | Delete file from Cloudinary |
+
+#### System
+| Endpoint | Method | Purpose |
+|----------|--------|---------|  
+| `/api/health/` | GET | Health check |
+| `/api/tasks/<task_id>/` | GET | Celery task status polling |
+| `/api/docs/` | GET | Swagger UI |
+| `/api/redoc/` | GET | ReDoc API documentation |
+| `/api/schema/` | GET | OpenAPI 3.0 schema |
 
 ### 8.5 WebSocket Endpoints
 
@@ -315,11 +349,53 @@ Run `python manage.py create_demo_users` to create:
 
 | Color | Status | Description |
 |-------|--------|-------------|
-| 🔵 BLUE | Available | Table is free and ready for seating |
-| 🔴 RED | Needs Attention | Wait time exceeded or issue detected |
-| 🟢 GREEN | Delivered | Order delivered, customer satisfied |
-| 🟡 YELLOW | Waiting | Order in progress |
-| ⚫ GREY | Reserved | Table reserved or inactive |
+| 🔵 BLUE | Empty / Ready | Table is free and available for seating |
+| 🔴 RED | Occupied - Waiting | Order placed, food not yet served |
+| 🟢 GREEN | Occupied - Served | Food delivered, customer eating |
+| 🟡 YELLOW | Issue / Delay | Wait time exceeded 15 minutes |
+| ⚫ GREY | Maintenance / Reserved | Table not available |
+
+### 8.7 Background Processing (Celery)
+
+TwinEngine uses **Celery** with Redis broker for asynchronous task processing:
+
+| Task | Description | Schedule |
+|------|-------------|----------|
+| `train_models_for_outlet` | Retrain all 6 ML models for an outlet | On-demand / Nightly at 02:00 |
+| `send_inventory_alerts` | Email low-stock alerts | Morning at 07:00 |
+| `generate_report_task` | Full GPT-4o report pipeline (async) | On-demand |
+| `email_report_task` | Email report download link | On report completion |
+
+Task status polling: `GET /api/tasks/<task_id>/` returns `PENDING`, `STARTED`, `SUCCESS`, or `FAILURE`.
+
+### 8.8 Rate Limiting & Security
+
+| Scope | Rate | Applied To |
+|-------|------|-----------|
+| Anonymous | 30/min | All unauthenticated requests |
+| Authenticated | 120/min | All authenticated requests |
+| Auth endpoints | 10/min | Login, register, password change |
+| Predictions | 60/min | All ML prediction endpoints |
+| Reports | 10/min | Report generation |
+| Uploads | 20/min | Cloudinary file operations |
+| Training | 5/min | ML model retraining |
+
+Additional security: **django-axes** brute-force protection (5 failed attempts → 30 min lockout), audit logging middleware, security headers on every response.
+
+### 8.9 ML Prediction Models
+
+Six machine learning models power the predictive analytics:
+
+| Model | Algorithm | Purpose |
+|-------|-----------|---------|
+| BusyHoursPredictor | RandomForestClassifier | Predicts hourly order volume |
+| FootfallForecaster | GradientBoostingRegressor | Forecasts expected guest count |
+| FoodDemandPredictor | RandomForestRegressor | Predicts demand per food category |
+| InventoryPredictor | Rule-based | Inventory depletion alerts & reorder timing |
+| StaffingOptimizer | Rule-based | Optimal staff count per shift |
+| RevenueForecaster | GradientBoostingRegressor | Revenue forecast by hour/day |
+
+All models use scikit-learn, trained on outlet-specific SalesData, and are serialized with joblib.
 
 ---
 

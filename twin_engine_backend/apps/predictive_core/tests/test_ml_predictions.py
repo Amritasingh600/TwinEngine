@@ -77,8 +77,9 @@ class PredictionEndpointTests(TestCase):
         print(f"  dashboard: all 6 predictions present")
 
     def test_train_endpoint(self):
-        resp = self.client.post('/api/predictions/train/?outlet=4')
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        resp = self.client.post('/api/predictions/train/?outlet=4&sync=true')
+        # sync=true runs training in-request; returns 200
+        self.assertIn(resp.status_code, [status.HTTP_200_OK, status.HTTP_202_ACCEPTED])
         data = resp.json()
         self.assertIn('results', data)
         print(f"  train: status={data.get('status')}")

@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Avg
 from datetime import datetime
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiTypes
 
 from .models import SalesData, InventoryItem, StaffSchedule
 from .serializers import (
@@ -13,9 +14,25 @@ from .serializers import (
     InventoryItemSerializer, InventoryItemListSerializer, InventoryUpdateSerializer,
     StaffScheduleSerializer, StaffScheduleCreateSerializer
 )
+from .schema_serializers import (
+    BusyHoursResponseSerializer, FootfallResponseSerializer,
+    FoodDemandResponseSerializer, InventoryAlertsResponseSerializer,
+    StaffingResponseSerializer, RevenueResponseSerializer,
+    DashboardResponseSerializer, TrainResultSerializer,
+    ErrorResponseSerializer,
+)
 from .ml.prediction_service import PredictionService
+from twinengine_core.throttles import PredictionRateThrottle, TrainingRateThrottle
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Sales Data'], summary='List all sales data records'),
+    create=extend_schema(tags=['Sales Data'], summary='Create a sales data record'),
+    retrieve=extend_schema(tags=['Sales Data'], summary='Retrieve a sales data record'),
+    update=extend_schema(tags=['Sales Data'], summary='Update a sales data record'),
+    partial_update=extend_schema(tags=['Sales Data'], summary='Partial update a sales data record'),
+    destroy=extend_schema(tags=['Sales Data'], summary='Delete a sales data record'),
+)
 class SalesDataViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Sales Data (for AI predictions).
@@ -38,11 +55,18 @@ class SalesDataViewSet(viewsets.ModelViewSet):
             return SalesDataCreateSerializer
         return SalesDataSerializer
     
+    @extend_schema(tags=['Sales Data'], summary='Get sales trends over time', parameters=[
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+        OpenApiParameter('days', OpenApiTypes.INT, description='Number of days to look back (default 30)'),
+    ])
     @action(detail=False, methods=['get'])
     def trends(self, request):
         """Get sales trends over time."""
         outlet_id = request.query_params.get('outlet')
-        days = int(request.query_params.get('days', 30))
+        try:
+            days = int(request.query_params.get('days', 30))
+        except (ValueError, TypeError):
+            return Response({'error': 'days must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
         
         from datetime import timedelta
         from django.utils import timezone
@@ -60,6 +84,10 @@ class SalesDataViewSet(viewsets.ModelViewSet):
         
         return Response(list(daily))
     
+    @extend_schema(tags=['Sales Data'], summary='Get average hourly patterns', parameters=[
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+        OpenApiParameter('day_of_week', OpenApiTypes.INT, description='Day of week (0=Mon, 6=Sun)'),
+    ])
     @action(detail=False, methods=['get'])
     def hourly_pattern(self, request):
         """Get average hourly patterns for predictions."""
@@ -81,6 +109,14 @@ class SalesDataViewSet(viewsets.ModelViewSet):
         return Response(list(hourly))
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Inventory'], summary='List all inventory items'),
+    create=extend_schema(tags=['Inventory'], summary='Create an inventory item'),
+    retrieve=extend_schema(tags=['Inventory'], summary='Retrieve an inventory item'),
+    update=extend_schema(tags=['Inventory'], summary='Update an inventory item'),
+    partial_update=extend_schema(tags=['Inventory'], summary='Partial update an inventory item'),
+    destroy=extend_schema(tags=['Inventory'], summary='Delete an inventory item'),
+)
 class InventoryItemViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Inventory Items.
@@ -104,6 +140,7 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
             return InventoryItemListSerializer
         return InventoryItemSerializer
     
+    @extend_schema(tags=['Inventory'], summary='Adjust inventory quantity', request=InventoryUpdateSerializer, responses={200: InventoryItemSerializer})
     @action(detail=True, methods=['post'])
     def adjust(self, request, pk=None):
         """Adjust inventory quantity (add or subtract)."""
@@ -114,6 +151,9 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
             return Response(InventoryItemSerializer(item).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+    @extend_schema(tags=['Inventory'], summary='Get low-stock items', parameters=[
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+    ], responses={200: InventoryItemSerializer(many=True)})
     @action(detail=False, methods=['get'])
     def low_stock(self, request):
         """Get all items below reorder threshold."""
@@ -127,13 +167,20 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         serializer = InventoryItemSerializer(low_items, many=True)
         return Response(serializer.data)
     
+    @extend_schema(tags=['Inventory'], summary='Get items expiring soon', parameters=[
+        OpenApiParameter('days', OpenApiTypes.INT, description='Days until expiry (default 7)'),
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+    ], responses={200: InventoryItemSerializer(many=True)})
     @action(detail=False, methods=['get'])
     def expiring_soon(self, request):
         """Get items expiring within X days."""
         from datetime import timedelta
         from django.utils import timezone
         
-        days = int(request.query_params.get('days', 7))
+        try:
+            days = int(request.query_params.get('days', 7))
+        except (ValueError, TypeError):
+            return Response({'error': 'days must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
         outlet_id = request.query_params.get('outlet')
         
         threshold = timezone.now().date() + timedelta(days=days)
@@ -145,6 +192,14 @@ class InventoryItemViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Schedules'], summary='List all staff schedules'),
+    create=extend_schema(tags=['Schedules'], summary='Create a staff schedule'),
+    retrieve=extend_schema(tags=['Schedules'], summary='Retrieve a staff schedule'),
+    update=extend_schema(tags=['Schedules'], summary='Update a staff schedule'),
+    partial_update=extend_schema(tags=['Schedules'], summary='Partial update a staff schedule'),
+    destroy=extend_schema(tags=['Schedules'], summary='Delete a staff schedule'),
+)
 class StaffScheduleViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Staff Schedules.
@@ -168,6 +223,7 @@ class StaffScheduleViewSet(viewsets.ModelViewSet):
             return StaffScheduleCreateSerializer
         return StaffScheduleSerializer
     
+    @extend_schema(tags=['Schedules'], summary='Record staff check-in', request=None, responses={200: StaffScheduleSerializer})
     @action(detail=True, methods=['post'])
     def check_in(self, request, pk=None):
         """Record staff check-in."""
@@ -177,6 +233,7 @@ class StaffScheduleViewSet(viewsets.ModelViewSet):
         schedule.save()
         return Response(StaffScheduleSerializer(schedule).data)
     
+    @extend_schema(tags=['Schedules'], summary='Record staff check-out', request=None, responses={200: StaffScheduleSerializer})
     @action(detail=True, methods=['post'])
     def check_out(self, request, pk=None):
         """Record staff check-out."""
@@ -186,6 +243,9 @@ class StaffScheduleViewSet(viewsets.ModelViewSet):
         schedule.save()
         return Response(StaffScheduleSerializer(schedule).data)
     
+    @extend_schema(tags=['Schedules'], summary="Get today's schedules", parameters=[
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+    ], responses={200: StaffScheduleSerializer(many=True)})
     @action(detail=False, methods=['get'])
     def today(self, request):
         """Get today's schedules."""
@@ -200,6 +260,9 @@ class StaffScheduleViewSet(viewsets.ModelViewSet):
         serializer = StaffScheduleSerializer(qs, many=True)
         return Response(serializer.data)
     
+    @extend_schema(tags=['Schedules'], summary='Get schedules for a specific staff member', parameters=[
+        OpenApiParameter('staff_id', OpenApiTypes.INT, description='Staff member ID', required=True),
+    ], responses={200: StaffScheduleSerializer(many=True)})
     @action(detail=False, methods=['get'])
     def by_staff(self, request):
         """Get schedules for a specific staff member."""
@@ -217,9 +280,16 @@ class StaffScheduleViewSet(viewsets.ModelViewSet):
 # Prediction API Endpoints
 # =====================================================================
 
+_PREDICTION_PARAMS = [
+    OpenApiParameter('outlet', OpenApiTypes.INT, description='Outlet ID', required=True),
+    OpenApiParameter('date', OpenApiTypes.DATE, description='Target date (YYYY-MM-DD, default today)', required=False),
+]
+
+
 class PredictionBaseView(APIView):
     """Base view with shared parameter parsing."""
     permission_classes = [IsAuthenticated]
+    throttle_classes = [PredictionRateThrottle]
 
     def _parse_params(self, request):
         outlet_id = request.query_params.get('outlet')
@@ -255,8 +325,14 @@ class PredictionBaseView(APIView):
 
 
 class BusyHoursPredictionView(PredictionBaseView):
-    """GET /api/predictions/busy-hours/?outlet=4&date=2026-03-04"""
+    """Predict busy hours for an outlet on a given date."""
 
+    @extend_schema(
+        tags=['Predictions'],
+        summary='Predict busy hours',
+        parameters=_PREDICTION_PARAMS,
+        responses={200: BusyHoursResponseSerializer, 400: ErrorResponseSerializer},
+    )
     def get(self, request):
         outlet_id, target_date, error = self._parse_params(request)
         if error:
@@ -268,8 +344,14 @@ class BusyHoursPredictionView(PredictionBaseView):
 
 
 class FootfallPredictionView(PredictionBaseView):
-    """GET /api/predictions/footfall/?outlet=4&date=2026-03-04"""
+    """Predict hourly guest footfall for an outlet."""
 
+    @extend_schema(
+        tags=['Predictions'],
+        summary='Predict footfall',
+        parameters=_PREDICTION_PARAMS,
+        responses={200: FootfallResponseSerializer, 400: ErrorResponseSerializer},
+    )
     def get(self, request):
         outlet_id, target_date, error = self._parse_params(request)
         if error:
@@ -281,8 +363,14 @@ class FootfallPredictionView(PredictionBaseView):
 
 
 class FoodDemandPredictionView(PredictionBaseView):
-    """GET /api/predictions/food-demand/?outlet=4&date=2026-03-04"""
+    """Predict per-category food demand revenue."""
 
+    @extend_schema(
+        tags=['Predictions'],
+        summary='Predict food demand',
+        parameters=_PREDICTION_PARAMS,
+        responses={200: FoodDemandResponseSerializer, 400: ErrorResponseSerializer},
+    )
     def get(self, request):
         outlet_id, target_date, error = self._parse_params(request)
         if error:
@@ -294,8 +382,14 @@ class FoodDemandPredictionView(PredictionBaseView):
 
 
 class InventoryAlertView(PredictionBaseView):
-    """GET /api/predictions/inventory-alerts/?outlet=4"""
+    """Get AI-based inventory reorder alerts."""
 
+    @extend_schema(
+        tags=['Predictions'],
+        summary='Get inventory alerts',
+        parameters=[_PREDICTION_PARAMS[0]],
+        responses={200: InventoryAlertsResponseSerializer, 400: ErrorResponseSerializer},
+    )
     def get(self, request):
         outlet_id, _, error = self._parse_params(request)
         if error:
@@ -307,8 +401,14 @@ class InventoryAlertView(PredictionBaseView):
 
 
 class StaffingPredictionView(PredictionBaseView):
-    """GET /api/predictions/staffing/?outlet=4&date=2026-03-04"""
+    """Get AI staffing recommendations by shift."""
 
+    @extend_schema(
+        tags=['Predictions'],
+        summary='Predict staffing needs',
+        parameters=_PREDICTION_PARAMS,
+        responses={200: StaffingResponseSerializer, 400: ErrorResponseSerializer},
+    )
     def get(self, request):
         outlet_id, target_date, error = self._parse_params(request)
         if error:
@@ -320,22 +420,39 @@ class StaffingPredictionView(PredictionBaseView):
 
 
 class RevenuePredictionView(PredictionBaseView):
-    """GET /api/predictions/revenue/?outlet=4&date=2026-03-04"""
+    """Forecast revenue for the next N days."""
 
+    @extend_schema(
+        tags=['Predictions'],
+        summary='Forecast revenue',
+        parameters=_PREDICTION_PARAMS + [
+            OpenApiParameter('days', OpenApiTypes.INT, description='Number of forecast days (default 7)'),
+        ],
+        responses={200: RevenueResponseSerializer, 400: ErrorResponseSerializer},
+    )
     def get(self, request):
         outlet_id, target_date, error = self._parse_params(request)
         if error:
             return error
 
-        days = int(request.query_params.get('days', 7))
+        try:
+            days = int(request.query_params.get('days', 7))
+        except (ValueError, TypeError):
+            return Response({'error': 'days must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
         service = PredictionService()
         result = service.get_revenue_forecast(outlet_id, target_date, days)
         return Response(result)
 
 
 class PredictionDashboardView(PredictionBaseView):
-    """GET /api/predictions/dashboard/?outlet=4&date=2026-03-04"""
+    """Aggregated dashboard with all prediction types."""
 
+    @extend_schema(
+        tags=['Predictions'],
+        summary='Get prediction dashboard (all models)',
+        parameters=_PREDICTION_PARAMS,
+        responses={200: DashboardResponseSerializer, 400: ErrorResponseSerializer},
+    )
     def get(self, request):
         outlet_id, target_date, error = self._parse_params(request)
         if error:
@@ -348,11 +465,23 @@ class PredictionDashboardView(PredictionBaseView):
 
 class TrainModelsView(APIView):
     """
-    POST /api/predictions/train/?outlet=4
-    Manager-only endpoint to trigger model retraining.
+    Manager-only endpoint to trigger model retraining for an outlet.
+    Training runs asynchronously via Celery; the response returns a task ID
+    that can be polled at /api/tasks/{task_id}/.
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [TrainingRateThrottle]
 
+    @extend_schema(
+        tags=['Predictions'],
+        summary='Train ML models for an outlet (async)',
+        parameters=[
+            OpenApiParameter('outlet', OpenApiTypes.INT, description='Outlet ID', required=True),
+            OpenApiParameter('sync', OpenApiTypes.BOOL, description='Run synchronously (default false)', required=False),
+        ],
+        request=None,
+        responses={202: TrainResultSerializer, 200: TrainResultSerializer, 400: ErrorResponseSerializer},
+    )
     def post(self, request):
         outlet_id = request.query_params.get('outlet')
         if not outlet_id:
@@ -361,6 +490,30 @@ class TrainModelsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        service = PredictionService()
-        results = service.train_all(int(outlet_id))
-        return Response({"status": "training complete", "results": results})
+        try:
+            outlet_id = int(outlet_id)
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "outlet must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Allow ?sync=true for backward-compat / testing
+        run_sync = request.query_params.get('sync', 'false').lower() == 'true'
+
+        if run_sync:
+            service = PredictionService()
+            results = service.train_all(outlet_id)
+            return Response({"status": "training complete", "results": results})
+
+        # Dispatch to Celery
+        from .tasks import train_models_for_outlet
+        task = train_models_for_outlet.delay(outlet_id)
+        return Response(
+            {
+                "status": "training dispatched",
+                "task_id": task.id,
+                "poll_url": f"/api/tasks/{task.id}/",
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )

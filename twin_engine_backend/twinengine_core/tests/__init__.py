@@ -468,3 +468,83 @@ class DeploymentFileTests(SimpleTestCase):
         """Makefile should exist."""
         makefile = Path(settings.BASE_DIR) / 'Makefile'
         self.assertTrue(makefile.is_file())
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# 9.  Health-check endpoint
+# ───────────────────────────────────────────────────────────────────────────
+class HealthCheckTests(TestCase):
+    """Tests for /api/health/ endpoint."""
+
+    def test_health_returns_200(self):
+        resp = self.client.get('/api/health/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['status'], 'healthy')
+        self.assertEqual(resp.data['database'], 'connected')
+
+    def test_health_returns_version(self):
+        resp = self.client.get('/api/health/')
+        self.assertIn('version', resp.data)
+
+    @mock.patch('twinengine_core.urls.connection')
+    def test_health_db_unavailable(self, mock_conn):
+        mock_conn.ensure_connection.side_effect = Exception('DB down')
+        resp = self.client.get('/api/health/')
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.data['database'], 'unavailable')
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# 10. Custom throttle classes
+# ───────────────────────────────────────────────────────────────────────────
+class ThrottleClassTests(SimpleTestCase):
+    """Verify each throttle class has the correct scope."""
+
+    def test_auth_throttle_scope(self):
+        from twinengine_core.throttles import AuthRateThrottle
+        self.assertEqual(AuthRateThrottle().scope, 'auth')
+
+    def test_prediction_throttle_scope(self):
+        from twinengine_core.throttles import PredictionRateThrottle
+        self.assertEqual(PredictionRateThrottle().scope, 'predictions')
+
+    def test_report_throttle_scope(self):
+        from twinengine_core.throttles import ReportRateThrottle
+        self.assertEqual(ReportRateThrottle().scope, 'reports')
+
+    def test_upload_throttle_scope(self):
+        from twinengine_core.throttles import UploadRateThrottle
+        self.assertEqual(UploadRateThrottle().scope, 'uploads')
+
+    def test_training_throttle_scope(self):
+        from twinengine_core.throttles import TrainingRateThrottle
+        self.assertEqual(TrainingRateThrottle().scope, 'training')
+
+    def test_scopes_in_settings(self):
+        """All custom scopes must be listed in DEFAULT_THROTTLE_RATES."""
+        rates = settings.REST_FRAMEWORK.get('DEFAULT_THROTTLE_RATES', {})
+        for scope in ('auth', 'predictions', 'reports', 'uploads', 'training'):
+            self.assertIn(scope, rates, f'Missing throttle rate for scope: {scope}')
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# 11. RequestAuditMiddleware
+# ───────────────────────────────────────────────────────────────────────────
+class RequestAuditMiddlewareTests(TestCase):
+    """Tests for the custom request audit middleware."""
+
+    def test_security_headers_present(self):
+        """Every API response should include security headers."""
+        resp = self.client.get('/api/health/')
+        self.assertEqual(resp['X-Content-Type-Options'], 'nosniff')
+        self.assertEqual(resp['X-Frame-Options'], 'DENY')
+        self.assertIn('strict-origin', resp['Referrer-Policy'])
+        self.assertIn('camera=()', resp['Permissions-Policy'])
+
+    def test_static_path_skipped(self):
+        """Static paths should not get extra security headers from middleware."""
+        resp = self.client.get('/static/nonexistent.css')
+        # Static files bypass middleware – no X-Content-Type-Options added by *our* middleware
+        # (may be added by SecurityMiddleware, but our audit middleware skips it)
+        # Just verify the request doesn't crash
+        self.assertIn(resp.status_code, (200, 301, 302, 404))

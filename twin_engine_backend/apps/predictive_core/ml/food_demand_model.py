@@ -5,6 +5,7 @@ Algorithm: RandomForestRegressor (one model per category, scikit-learn)
 """
 import logging
 import joblib
+from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
@@ -116,7 +117,6 @@ class FoodDemandPredictor:
                 pred_rows = []
                 for h in hours:
                     # Get rolling avg for this category
-                    from datetime import timedelta
                     start = target_date - timedelta(days=7)
                     hist = SalesData.objects.filter(
                         outlet_id=outlet_id,

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 from .models import ServiceNode, ServiceFlow
 
 
@@ -27,9 +28,11 @@ class ServiceNodeListSerializer(serializers.ModelSerializer):
         model = ServiceNode
         fields = ['id', 'name', 'node_type', 'current_status', 'capacity', 'position', 'color']
     
+    @extend_schema_field({'type': 'object', 'properties': {'x': {'type': 'number'}, 'y': {'type': 'number'}, 'z': {'type': 'number'}}})
     def get_position(self, obj):
         return {'x': obj.pos_x, 'y': obj.pos_y, 'z': obj.pos_z}
     
+    @extend_schema_field(serializers.CharField())
     def get_color(self, obj):
         """Return hex color code for 3D rendering based on status."""
         color_map = {
@@ -55,6 +58,7 @@ class ServiceNodeDetailSerializer(serializers.ModelSerializer):
             'current_status', 'is_active', 'active_order'
         ]
     
+    @extend_schema_field({'type': 'object', 'properties': {'id': {'type': 'integer'}, 'status': {'type': 'string'}, 'party_size': {'type': 'integer'}, 'placed_at': {'type': 'string', 'format': 'date-time'}, 'total': {'type': 'string'}}, 'nullable': True})
     def get_active_order(self, obj):
         """Get current active order for this table."""
         if obj.node_type != 'TABLE':

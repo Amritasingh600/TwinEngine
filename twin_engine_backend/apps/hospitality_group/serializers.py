@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from drf_spectacular.utils import extend_schema_field
 from .models import Brand, Outlet, UserProfile
 
 
@@ -24,6 +25,7 @@ class BrandSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
+    @extend_schema_field(serializers.IntegerField())
     def get_outlet_count(self, obj):
         return obj.outlets.count()
 
@@ -50,6 +52,7 @@ class OutletSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
+    @extend_schema_field(serializers.IntegerField())
     def get_staff_count(self, obj):
         return obj.staff.count()
 

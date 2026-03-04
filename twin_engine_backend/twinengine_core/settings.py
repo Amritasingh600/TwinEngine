@@ -21,6 +21,11 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# ── Deployment environment detection ─────────────────────────
+# DEPLOY_ENV: 'development' | 'staging' | 'production'
+DEPLOY_ENV = os.getenv('DEPLOY_ENV', 'development')
+IS_PRODUCTION = DEPLOY_ENV == 'production'
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -51,6 +56,10 @@ INSTALLED_APPS = [
     'corsheaders',
     'channels',
     'django_filters',
+    'drf_spectacular',
+    'django_celery_beat',
+    'django_celery_results',
+    'axes',
     
     # Local apps
     'apps.hospitality_group',
@@ -70,6 +79,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware',
+    'twinengine_core.middleware.RequestAuditMiddleware',
 ]
 
 ROOT_URLCONF = 'twinengine_core.urls'
@@ -77,7 +88,7 @@ ROOT_URLCONF = 'twinengine_core.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -96,30 +107,32 @@ WSGI_APPLICATION = 'twinengine_core.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-# Add these at the top of your settings.py
+_DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///db.sqlite3')
 
-
-
-# Replace the DATABASES section of your settings.py with this
-tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': tmpPostgres.path.replace('/', ''),
-        'USER': tmpPostgres.username,
-        'PASSWORD': tmpPostgres.password,
-        'HOST': tmpPostgres.hostname,
-        'PORT': 5432,
-        'OPTIONS': dict(parse_qsl(tmpPostgres.query)),
+if _DATABASE_URL.startswith('sqlite'):
+    # SQLite for local development
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    # PostgreSQL for staging / production
+    tmpPostgres = urlparse(_DATABASE_URL)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': tmpPostgres.path.lstrip('/'),
+            'USER': tmpPostgres.username,
+            'PASSWORD': tmpPostgres.password,
+            'HOST': tmpPostgres.hostname,
+            'PORT': tmpPostgres.port or 5432,
+            'OPTIONS': dict(parse_qsl(tmpPostgres.query)),
+            'CONN_MAX_AGE': 600 if IS_PRODUCTION else 0,  # persistent connections in prod
+            'CONN_HEALTH_CHECKS': True,
+        }
+    }
 
 
 # Password validation
@@ -304,8 +317,9 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
-    ],
+    ] + (
+        ['rest_framework.renderers.BrowsableAPIRenderer'] if DEBUG else []
+    ),
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
@@ -313,6 +327,59 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 50,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    # ── Throttling ──
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '30/minute',
+        'user': '120/minute',
+        'auth': '10/minute',           # login / register
+        'predictions': '60/minute',    # ML prediction endpoints
+        'reports': '10/minute',        # heavy report generation
+        'uploads': '20/minute',        # file uploads
+        'training': '5/minute',        # model training
+    },
+}
+
+# drf-spectacular Configuration
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'TwinEngine Hospitality API',
+    'DESCRIPTION': (
+        'AI-powered digital twin backend for hospitality operations.\n\n'
+        '**Features:** Floor layout management, real-time order lifecycle, '
+        'ML-driven predictions (demand, footfall, revenue, staffing, inventory), '
+        'AI-generated PDF reports, and Cloudinary media management.'
+    ),
+    'VERSION': '2.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'TAGS': [
+        {'name': 'Auth', 'description': 'JWT authentication & user management'},
+        {'name': 'Brands', 'description': 'Restaurant group / chain management'},
+        {'name': 'Outlets', 'description': 'Individual restaurant locations'},
+        {'name': 'Staff', 'description': 'Staff profile management'},
+        {'name': 'Layout - Nodes', 'description': 'Service nodes (tables, stations) for floor visualization'},
+        {'name': 'Layout - Flows', 'description': 'Connections between service nodes'},
+        {'name': 'Orders', 'description': 'Order lifecycle management'},
+        {'name': 'Payments', 'description': 'Payment processing & logs'},
+        {'name': 'Sales Data', 'description': 'Historical sales data for ML'},
+        {'name': 'Inventory', 'description': 'Inventory item management'},
+        {'name': 'Schedules', 'description': 'Staff scheduling'},
+        {'name': 'Predictions', 'description': 'ML prediction endpoints (demand, footfall, revenue, etc.)'},
+        {'name': 'Reports', 'description': 'AI-generated operational reports & daily summaries'},
+        {'name': 'Uploads', 'description': 'Cloudinary file upload / delete'},
+        {'name': 'Tasks', 'description': 'Celery background task status polling'},
+    ],
+    'ENUM_NAME_OVERRIDES': {
+        'OrderStatusEnum': 'apps.order_engine.models.OrderTicket.STATUS_CHOICES',
+        'PaymentStatusEnum': 'apps.order_engine.models.PaymentLog.STATUS_CHOICES',
+        'NodeStatusEnum': 'apps.layout_twin.models.ServiceNode.STATUS_CHOICES',
+        'ReportTypeEnum': 'apps.insights_hub.models.PDFReport.REPORT_TYPE_CHOICES',
+        'ReportGenerationStatusEnum': 'apps.insights_hub.models.PDFReport.GENERATION_STATUS_CHOICES',
+    },
 }
 
 # Simple JWT Configuration
@@ -335,6 +402,9 @@ SIMPLE_JWT = {
 # ---------------------------------------------------------------
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'DEBUG' if DEBUG else 'INFO')
 
+# Use stdout-only logging in containers (no file handlers)
+_IN_CONTAINER = os.getenv('CONTAINER', '').lower() in ('1', 'true')
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -347,40 +417,127 @@ LOGGING = {
             'format': '{asctime} [{levelname}] {message}',
             'style': '{',
         },
+        'json': {
+            '()': 'django.utils.log.ServerFormatter',
+            'format': '{asctime} [{levelname}] {name} — {message}',
+            'style': '{',
+        },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose' if DEBUG else 'simple',
+            'formatter': 'json' if IS_PRODUCTION else ('verbose' if DEBUG else 'simple'),
         },
-        'file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': BASE_DIR / 'logs' / 'twinengine.log',
-            'maxBytes': 5 * 1024 * 1024,  # 5 MB
-            'backupCount': 3,
-            'formatter': 'verbose',
-        },
+        **({} if _IN_CONTAINER else {
+            'file': {
+                'class': 'logging.handlers.RotatingFileHandler',
+                'filename': BASE_DIR / 'logs' / 'twinengine.log',
+                'maxBytes': 5 * 1024 * 1024,  # 5 MB
+                'backupCount': 3,
+                'formatter': 'verbose',
+            },
+            'audit_file': {
+                'class': 'logging.handlers.RotatingFileHandler',
+                'filename': BASE_DIR / 'logs' / 'audit.log',
+                'maxBytes': 10 * 1024 * 1024,  # 10 MB
+                'backupCount': 5,
+                'formatter': 'verbose',
+            },
+        }),
     },
     'root': {
-        'handlers': ['console', 'file'],
+        'handlers': ['console'] if _IN_CONTAINER else ['console', 'file'],
         'level': LOG_LEVEL,
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'] if _IN_CONTAINER else ['console', 'file'],
             'level': 'INFO',
             'propagate': False,
         },
         'django.request': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'] if _IN_CONTAINER else ['console', 'file'],
             'level': 'WARNING',
             'propagate': False,
         },
         'apps': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'] if _IN_CONTAINER else ['console', 'file'],
             'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'twinengine.audit': {
+            'handlers': ['console'] if _IN_CONTAINER else ['console', 'audit_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'axes': {
+            'handlers': ['console'] if _IN_CONTAINER else ['console', 'audit_file'],
+            'level': 'INFO',
             'propagate': False,
         },
     },
 }
+
+# ---------------------------------------------------------------
+# Celery Configuration (background task processing)
+# ---------------------------------------------------------------
+CELERY_BROKER_URL = _REDIS_URL or 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'django-db'          # django_celery_results
+CELERY_RESULT_EXTENDED = True                 # store task args / kwargs in DB
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60             # hard kill after 30 min
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60        # soft warning at 25 min
+
+# Celery Beat — periodic task schedule
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# ---------------------------------------------------------------
+# Email Configuration — Mailtrap Sandbox
+# ---------------------------------------------------------------
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'sandbox.smtp.mailtrap.io')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'c18bad0549e293')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', 'eab8483f4ebb55')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '2525'))
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@twinengine.io')
+
+# ---------------------------------------------------------------
+# Django Axes — Brute-force login protection
+# ---------------------------------------------------------------
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+AXES_FAILURE_LIMIT = 5                         # lock after 5 failed attempts
+AXES_COOLOFF_TIME = timedelta(minutes=30)      # unlock after 30 min
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]  # lock by user+IP combo
+AXES_RESET_ON_SUCCESS = True                   # reset counter on successful login
+AXES_LOCKOUT_CALLABLE = None                   # use default 403 response
+AXES_IPWARE_META_PRECEDENCE_ORDER = (          # header precedence for IP detection
+    'HTTP_X_FORWARDED_FOR',
+    'REMOTE_ADDR',
+)
+
+# ---------------------------------------------------------------
+# Additional Security Settings
+# ---------------------------------------------------------------
+# Password minimum length (strengthened)
+AUTH_PASSWORD_VALIDATORS[1] = {
+    'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+    'OPTIONS': {'min_length': 10},
+}
+
+# Session timeout
+SESSION_COOKIE_AGE = 60 * 60 * 2               # 2 hours
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# File upload limits
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB max request body
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB max file upload
 

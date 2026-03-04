@@ -5,9 +5,11 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from .serializers import FileUploadSerializer, MultiFileUploadSerializer, FileDeleteSerializer
 from .upload import CloudinaryUploadService
+from twinengine_core.throttles import UploadRateThrottle
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +34,12 @@ class FileUploadView(APIView):
             "bytes": 12345
         }
     """
+    serializer_class = FileUploadSerializer
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAuthenticated]
+    throttle_classes = [UploadRateThrottle]
 
+    @extend_schema(tags=['Uploads'], summary='Upload a single file', request=FileUploadSerializer)
     def post(self, request):
         serializer = FileUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -64,9 +69,12 @@ class MultiFileUploadView(APIView):
             "failed": [ { "filename": "x.pdf", "error": "…" } ]
         }
     """
+    serializer_class = MultiFileUploadSerializer
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAuthenticated]
+    throttle_classes = [UploadRateThrottle]
 
+    @extend_schema(tags=['Uploads'], summary='Upload multiple files', request=MultiFileUploadSerializer)
     def post(self, request):
         serializer = MultiFileUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -102,8 +110,11 @@ class FileDeleteView(APIView):
     Response 200:
         { "success": true }
     """
+    serializer_class = FileDeleteSerializer
     permission_classes = [IsAuthenticated]
+    throttle_classes = [UploadRateThrottle]
 
+    @extend_schema(tags=['Uploads'], summary='Delete a file from Cloudinary', request=FileDeleteSerializer)
     def delete(self, request):
         serializer = FileDeleteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

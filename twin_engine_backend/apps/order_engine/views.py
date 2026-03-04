@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.core.exceptions import ValidationError as DjangoValidationError
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiTypes
 from .models import OrderTicket, PaymentLog
 from .serializers import (
     OrderTicketSerializer, OrderTicketCreateSerializer, OrderTicketListSerializer,
@@ -14,6 +15,14 @@ from .serializers import (
 )
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Orders'], summary='List all orders'),
+    create=extend_schema(tags=['Orders'], summary='Create an order'),
+    retrieve=extend_schema(tags=['Orders'], summary='Retrieve an order'),
+    update=extend_schema(tags=['Orders'], summary='Update an order'),
+    partial_update=extend_schema(tags=['Orders'], summary='Partial update an order'),
+    destroy=extend_schema(tags=['Orders'], summary='Delete an order'),
+)
 class OrderTicketViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Order Tickets.
@@ -47,6 +56,7 @@ class OrderTicketViewSet(viewsets.ModelViewSet):
             from rest_framework.exceptions import ValidationError as DRFValidationError
             raise DRFValidationError(detail=exc.messages)
 
+    @extend_schema(tags=['Orders'], summary='Update order status', request=OrderStatusUpdateSerializer, responses={200: OrderTicketSerializer})
     @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
         """Update order status and auto-update table color."""
@@ -63,6 +73,9 @@ class OrderTicketViewSet(viewsets.ModelViewSet):
             return Response(OrderTicketSerializer(order).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
+    @extend_schema(tags=['Orders'], summary='Get all active orders', parameters=[
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+    ], responses={200: OrderTicketListSerializer(many=True)})
     @action(detail=False, methods=['get'])
     def active(self, request):
         """Get all active (not completed/cancelled) orders."""
@@ -73,6 +86,10 @@ class OrderTicketViewSet(viewsets.ModelViewSet):
         serializer = OrderTicketListSerializer(orders, many=True)
         return Response(serializer.data)
     
+    @extend_schema(tags=['Orders'], summary='Get orders for a table', parameters=[
+        OpenApiParameter('table_id', OpenApiTypes.INT, description='Table/node ID', required=True),
+        OpenApiParameter('active_only', OpenApiTypes.BOOL, description='Only active orders (default false)'),
+    ], responses={200: OrderTicketSerializer(many=True)})
     @action(detail=False, methods=['get'])
     def by_table(self, request):
         """Get orders for a specific table."""
@@ -87,6 +104,9 @@ class OrderTicketViewSet(viewsets.ModelViewSet):
         serializer = OrderTicketSerializer(orders, many=True)
         return Response(serializer.data)
     
+    @extend_schema(tags=['Orders'], summary='Get kitchen queue', parameters=[
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+    ], responses={200: OrderTicketListSerializer(many=True)})
     @action(detail=False, methods=['get'])
     def kitchen_queue(self, request):
         """Get orders that need kitchen attention."""
@@ -98,6 +118,14 @@ class OrderTicketViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Payments'], summary='List all payments'),
+    create=extend_schema(tags=['Payments'], summary='Create a payment'),
+    retrieve=extend_schema(tags=['Payments'], summary='Retrieve a payment'),
+    update=extend_schema(tags=['Payments'], summary='Update a payment'),
+    partial_update=extend_schema(tags=['Payments'], summary='Partial update a payment'),
+    destroy=extend_schema(tags=['Payments'], summary='Delete a payment'),
+)
 class PaymentLogViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing Payment Logs.
@@ -129,6 +157,10 @@ class PaymentLogViewSet(viewsets.ModelViewSet):
             order.completed_at = timezone.now()
             order.save()
     
+    @extend_schema(tags=['Payments'], summary='Get payment summary statistics', parameters=[
+        OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),
+        OpenApiParameter('date', OpenApiTypes.DATE, description='Filter by date (YYYY-MM-DD)'),
+    ])
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """Get payment summary statistics."""
@@ -169,7 +201,13 @@ class TableStatusTriggerView(APIView):
     Request: { node_id: int, status: string }
     Response: { updated: true }
     """
+    serializer_class = TableStatusTriggerSerializer
     
+    @extend_schema(
+        tags=['Layout - Nodes'],
+        summary='Manually trigger table status update',
+        request=TableStatusTriggerSerializer,
+    )
     def post(self, request):
         serializer = TableStatusTriggerSerializer(data=request.data)
         if serializer.is_valid():

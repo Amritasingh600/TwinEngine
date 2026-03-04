@@ -1,0 +1,111 @@
+# ==============================================================
+# TwinEngine Backend — Docker Compose (Local Development)
+# ==============================================================
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose logs -f web    # Follow web logs
+#   docker compose exec web python manage.py createsuperuser
+#   docker compose down -v        # Stop & remove volumes
+# ==============================================================
+
+services:
+  # ── PostgreSQL Database ─────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: twinengine
+      POSTGRES_USER: twinengine
+      POSTGRES_PASSWORD: twinengine_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U twinengine"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (Channels + Celery broker) ────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Django Web Server (Daphne ASGI) ─────────────────────────
+  web:
+    build: .
+    command: server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://twinengine:twinengine_dev@db:5432/twinengine
+      REDIS_URL: redis://redis:6379/0
+      DEBUG: "True"
+    volumes:
+      - .:/app
+      - static_data:/app/staticfiles
+      - media_data:/app/media
+      - log_data:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery Worker ───────────────────────────────────────────
+  worker:
+    build: .
+    command: worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://twinengine:twinengine_dev@db:5432/twinengine
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - .:/app
+      - log_data:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery Beat Scheduler ──────────────────────────────────
+  beat:
+    build: .
+    command: beat
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://twinengine:twinengine_dev@db:5432/twinengine
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - .:/app
+      - log_data:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_data:
+  media_data:
+  log_data:

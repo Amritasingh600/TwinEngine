@@ -9,7 +9,9 @@ VENV    = source venv/bin/activate
 
 .PHONY: help run migrate makemigrations check test \
         db-backup db-restore db-flush db-seed db-reset \
-        static superuser shell lint
+        static superuser shell lint \
+        docker-build docker-up docker-down docker-logs \
+        azure-deploy azure-infra
 
 # ------ Help ------
 help: ## Show this help
@@ -91,3 +93,35 @@ install: ## Install Python dependencies
 
 freeze: ## Freeze current packages to requirements
 	pip freeze > requirements.lock.txt
+
+# ------ Docker (Local) ------
+docker-build: ## Build Docker image
+	docker build -t twinengine:latest .
+
+docker-up: ## Start all services (Postgres + Redis + Django + Celery)
+	docker compose up -d
+
+docker-down: ## Stop all services
+	docker compose down
+
+docker-logs: ## Follow web container logs
+	docker compose logs -f web
+
+docker-shell: ## Open shell in running web container
+	docker compose exec web python manage.py shell
+
+docker-clean: ## Stop services and remove volumes
+	docker compose down -v --remove-orphans
+
+# ------ Deployment ------
+check-deploy: ## Run Django deployment checklist (simulates DEBUG=False)
+	DEBUG=False $(MANAGE) check --deploy
+
+azure-infra: ## Deploy Azure infrastructure via Bicep
+	chmod +x .azure/deploy.sh && .azure/deploy.sh
+
+celery-worker: ## Start Celery worker (local dev)
+	celery -A twinengine_core worker --loglevel=info
+
+celery-beat: ## Start Celery beat scheduler (local dev)
+	celery -A twinengine_core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler

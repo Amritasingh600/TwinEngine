@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 from .models import OrderTicket, PaymentLog
 
 
@@ -19,6 +20,7 @@ class OrderTicketSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'placed_at']
     
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_waiter_name(self, obj):
         if obj.waiter and obj.waiter.user:
             return obj.waiter.user.get_full_name() or obj.waiter.user.username
