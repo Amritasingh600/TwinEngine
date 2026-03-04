@@ -3,6 +3,15 @@ import { login as apiLogin, getProfile } from '../services/api';
 
 const AuthContext = createContext(null);
 
+/* Role codes from backend UserProfile.ROLE_CHOICES */
+export const ROLES = {
+  MANAGER: 'MANAGER',
+  WAITER: 'WAITER',
+  CHEF: 'CHEF',
+  HOST: 'HOST',
+  CASHIER: 'CASHIER',
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,6 +37,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('refresh_token', data.refresh);
     const profile = await getProfile();
     setUser(profile.data);
+    return profile.data;
   };
 
   const logout = () => {
@@ -36,8 +46,14 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  /** Get the role string from the user profile */
+  const role = user?.role || null;
+
+  /** Check if current user has one of the given roles */
+  const hasRole = (...roles) => roles.includes(role);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, role, hasRole }}>
       {children}
     </AuthContext.Provider>
   );

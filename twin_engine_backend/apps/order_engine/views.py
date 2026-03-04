@@ -44,8 +44,6 @@ class OrderTicketViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'create':
             return OrderTicketCreateSerializer
-        if self.action == 'list':
-            return OrderTicketListSerializer
         return OrderTicketSerializer
     
     def perform_update(self, serializer):
@@ -148,14 +146,8 @@ class PaymentLogViewSet(viewsets.ModelViewSet):
         return PaymentLogSerializer
     
     def perform_create(self, serializer):
-        """After creating payment, mark order as completed if paid in full."""
-        payment = serializer.save(status='SUCCESS')
-        order = payment.order
-        total_paid = sum(p.amount for p in order.payments.filter(status='SUCCESS'))
-        if total_paid >= order.total:
-            order.status = 'COMPLETED'
-            order.completed_at = timezone.now()
-            order.save()
+        """Create a payment record. Does NOT auto-complete the order."""
+        serializer.save()
     
     @extend_schema(tags=['Payments'], summary='Get payment summary statistics', parameters=[
         OpenApiParameter('outlet', OpenApiTypes.INT, description='Filter by outlet ID'),

@@ -89,9 +89,38 @@ export const getInventoryAlerts = (outletId) =>
 export const getStaffing = (outletId, date) =>
   api.get('/predictions/staffing/', { params: { outlet: outletId, date } });
 
+// --- Orders (create) ---
+export const createOrder = (data) => api.post('/orders/', data);
+
 // --- Inventory ---
 export const getInventory = (outletId) =>
   api.get('/inventory/', { params: { outlet: outletId } });
+
+export const createInventoryItem = (data) => api.post('/inventory/', data);
+
+export const updateInventoryItem = (itemId, data) =>
+  api.patch(`/inventory/${itemId}/`, data);
+
+export const deleteInventoryItem = (itemId) =>
+  api.delete(`/inventory/${itemId}/`);
+
+// --- Payments ---
+export const getPayments = (params) => api.get('/payments/', { params });
+
+export const createPayment = (data) => api.post('/payments/', data);
+
+export const updatePayment = (paymentId, data) =>
+  api.patch(`/payments/${paymentId}/`, data);
+
+// --- Staff ---
+export const getStaff = (outletId) =>
+  api.get('/staff/', { params: { outlet: outletId, is_on_shift: true } });
+
+export const getAllStaff = (outletId) =>
+  api.get('/staff/', { params: { outlet: outletId } });
+
+export const updateStaffMember = (staffId, data) =>
+  api.patch(`/staff/${staffId}/`, data);
 
 // --- Reports ---
 export const generateReport = (outletId, reportType, startDate) =>

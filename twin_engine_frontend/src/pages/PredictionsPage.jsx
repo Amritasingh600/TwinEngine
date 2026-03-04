@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { getPredictionDashboard, getBusyHours, getRevenue, getStaffing } from '../services/api';
 import { fmtDate, fmtCurrency } from '../utils/helpers';
+import { ROLES } from '../utils/AuthContext';
 
 export default function PredictionsPage() {
-  const { outletId } = useOutletContext();
+  const { outletId, role } = useOutletContext();
   const [date, setDate] = useState(fmtDate());
   const [dashboard, setDashboard] = useState(null);
   const [busyHours, setBusyHours] = useState(null);
@@ -36,10 +37,20 @@ export default function PredictionsPage() {
 
   useEffect(() => { load(); }, [outletId, date]);
 
+  /* Only MANAGER can view predictions */
+  if (role !== ROLES.MANAGER) {
+    return (
+      <div className="empty-state" style={{ marginTop: 40 }}>
+        <h3>🔒 Access Denied</h3>
+        <p>ML Predictions are available to Managers only.</p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex-between">
-        <h2>ML Predictions</h2>
+        <h2>🤖 ML Predictions</h2>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
 
