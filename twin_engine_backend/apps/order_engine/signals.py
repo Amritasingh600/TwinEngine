@@ -34,14 +34,16 @@ ORDER_TO_TABLE_STATUS = {
 }
 
 # Valid status transitions (from → [allowed destinations])
+# Relaxed: allows cashier/manager to move orders freely between states
+ALL_ORDER_STATUSES = ['PLACED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED']
 VALID_TRANSITIONS = {
     None: ['PLACED'],                                    # New order
-    'PLACED': ['PREPARING', 'READY', 'SERVED', 'CANCELLED'],
-    'PREPARING': ['READY', 'SERVED', 'CANCELLED'],
-    'READY': ['SERVED', 'CANCELLED'],
-    'SERVED': ['COMPLETED', 'CANCELLED'],
-    'COMPLETED': [],                                     # Terminal state
-    'CANCELLED': [],                                     # Terminal state
+    'PLACED': ['PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED'],
+    'PREPARING': ['PLACED', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED'],
+    'READY': ['PLACED', 'PREPARING', 'SERVED', 'COMPLETED', 'CANCELLED'],
+    'SERVED': ['PLACED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'],
+    'COMPLETED': ['PLACED', 'PREPARING', 'READY', 'SERVED', 'CANCELLED'],
+    'CANCELLED': ['PLACED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'],
 }
 
 

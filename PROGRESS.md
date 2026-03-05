@@ -666,3 +666,107 @@ celery -A twinengine_core beat --loglevel=info --scheduler django_celery_beat.sc
 - **RegisterView**: Added username uniqueness check before `User.objects.create_user()` to return 400 instead of IntegrityError
 - **RegisterView**: Changed default role from `'STAFF'` to `'WAITER'` (valid ROLE_CHOICES value)
 - **train endpoint test**: Updated to use `?sync=true` parameter for in-request execution (avoids Redis dependency in tests)
+
+---
+
+### Week 6: Frontend Build & Integration
+
+- **5 Mar 2026** → **React Frontend — Complete Build & 6 Rounds of Bug Fixes / Feature Enhancements**
+
+#### Full Frontend Built from Scratch (React 19 + Vite 7)
+- 8 pages: Login, Dashboard, OutletLayout, Floor, Orders, Predictions, Inventory, Reports
+- API service layer (`src/services/api.js`) with JWT auth, auto-refresh, Axios interceptors
+- WebSocket hook for real-time floor updates
+- Role-based access control via `AuthContext` with `ROLES` constant and `RoleRoute` component
+- Vite proxy config: `/api` → Django backend, `/ws` → WebSocket
+
+#### Role-Based Architecture
+- **AuthContext** (`src/utils/AuthContext.jsx`): JWT login/logout, role getter, `hasRole()` helper
+- **RoleRoute** component in `App.jsx`: restricts routes by role
+- **OutletLayout**: role-specific navigation tabs per role
+- 5 roles fully implemented: MANAGER, WAITER, CHEF, HOST, CASHIER
+
+| Role | Pages | Capabilities |
+|------|-------|-------------|
+| MANAGER | Floor, Orders, Predictions, Inventory, Reports | Full access, lifecycle buttons, create orders, payment management |
+| WAITER | Floor, Orders | Read-only on orders, view floor layout |
+| CHEF | Orders, Inventory | Kitchen card view, inventory CRUD (add/remove items) |
+| HOST | Floor | Table management, staff assignment, 4 table statuses |
+| CASHIER | Orders | Free status transitions (any→any), create orders, payment toggle |
+
+#### UI/UX — Professional CSS Overhaul
+- ~1100+ lines of custom CSS (`index.css`)
+- CSS custom properties for theming (colors, shadows, radius, spacing)
+- Responsive grid layouts, data tables, card grids
+- Color-coded status badges (orders, tables, payments)
+- Professional profile dropdown with role badge + logout
+- Empty states, loading states, error handling throughout
+
+#### Round 1 Bug Fixes
+- Cashier order action buttons (status dropdown with "Go" button)
+- Host/Manager table status update flow
+- Host staff visibility on floor page
+
+#### Round 2 — UI Overhaul
+- Optimistic table status updates (instant visual feedback)
+- Professional CSS rewrite (full design system)
+- Cashier dropdown for status changes
+- Host staff editing capability
+
+#### Round 3 — Feature Enhancement
+- Host gets full 4-status options (BLUE/GREEN/YELLOW/RED)
+- Expandable staff management section on floor page
+- Fixed WebSocket connection badge ("Offline" → "Connecting...")
+- Cashier gets ALL status options in dropdown
+- Add new order functionality for Cashier/Manager
+- Chef gets add/remove inventory items capability
+- Professional profile dropdown + logout
+
+#### Round 4 — Role Refinement
+- Waiter made read-only on orders (no edit/create)
+- Chef given access to Orders page (sees active orders, auto-refresh)
+- Cashier create order form shows only available (BLUE) tables
+- Backend switched to full `OrderTicketSerializer` for list view
+
+#### Round 5 — Order Completion, Chef Cards, Payment System
+- Table auto-marks available (BLUE) on order completion across all portals
+- Chef portal: card-based kitchen display with status bars, elapsed time, urgency indicators
+- Cashier status transitions relaxed: any status → any other status
+- Payment system: separate Done/Pending toggle independent of order status
+- FloorPage: 20s auto-refresh interval for table status sync
+
+#### Round 6 — Critical Bug Fixes (Payment & Chef View)
+
+**Bug Fix: Payment auto-completing orders**
+- **Root cause**: `PaymentLogViewSet.perform_create()` was forcing `status='SUCCESS'` on every new payment AND auto-marking the order `COMPLETED` when total_paid ≥ order total
+- **Fix**: Stripped auto-complete logic — `perform_create()` now just calls `serializer.save()`. Payments default to `PENDING`. Order status and payment status are now fully independent
+- **File**: `apps/order_engine/views.py`
+
+**Bug Fix: Chef portal showing empty screen**
+- **Root cause**: Client-side filter `data.filter(o => ACTIVE_STATUSES.includes(o.status))` was removing ALL orders because every existing order had been auto-completed by the payment bug above
+- **Fix**: Removed aggressive client-side filtering. Chef view now shows two sections:
+  - 🔥 **Active Orders** (PLACED/PREPARING/READY/SERVED) — shown prominently at top
+  - 📋 **Past Orders** (COMPLETED/CANCELLED) — shown below at 60% opacity
+- Filter dropdown now includes all statuses (not just active)
+- Chef default landing page changed from `inventory` → `orders`
+- Added `console.error` logging to `fetchOrders`/`fetchPayments` (was silently swallowing errors)
+- Removed invalid `order__table__outlet` filter param from `fetchPayments` (not in backend `filterset_fields`)
+- **Files**: `src/pages/OrdersPage.jsx`, `src/pages/DashboardPage.jsx`
+
+#### Frontend File Summary
+
+| File | Purpose |
+|------|---------|
+| `src/App.jsx` | Routes with RoleRoute guards |
+| `src/main.jsx` | React entry point |
+| `src/index.css` | Full design system (~1100 lines) |
+| `src/utils/AuthContext.jsx` | JWT auth + role management |
+| `src/services/api.js` | Axios instance, all API calls, interceptors |
+| `src/pages/LoginPage.jsx` | JWT login form |
+| `src/pages/DashboardPage.jsx` | Outlet selector with role-based defaults |
+| `src/pages/OutletLayout.jsx` | Top bar, role nav, profile dropdown, Outlet context |
+| `src/pages/FloorPage.jsx` | 3D floor grid, table status, staff management, WebSocket |
+| `src/pages/OrdersPage.jsx` | Orders table/cards, payment toggle, create form (~600 lines) |
+| `src/pages/PredictionsPage.jsx` | ML prediction dashboard |
+| `src/pages/InventoryPage.jsx` | Inventory CRUD, low stock alerts |
+| `src/pages/ReportsPage.jsx` | AI report generation |

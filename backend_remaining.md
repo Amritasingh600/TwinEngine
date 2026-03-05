@@ -2,7 +2,7 @@
 
 This document tracks all backend tasks for the TwinEngine Hospitality platform.
 
-> **Last Updated:** 4 March 2026 — All backend tasks completed.
+> **Last Updated:** 5 March 2026 — All backend tasks completed. Frontend integration fixes applied.
 
 ---
 
@@ -474,6 +474,50 @@ DATABASE_URL='sqlite:///db.sqlite3' python manage.py test --verbosity=2
 | 17 | Comprehensive Testing (198) | 🟢 Low | ✅ Done |
 
 **All 17 backend tasks completed.**
+
+---
+
+## Frontend Integration Fixes (5 March 2026)
+
+During frontend integration and live testing, two backend bugs were discovered and fixed:
+
+### Bug Fix: Payment Auto-Completing Orders
+
+**Discovered:** 5 March 2026 during cashier portal testing
+
+**Problem:** When a payment was created via `POST /api/payments/`, the `PaymentLogViewSet.perform_create()` method:
+1. Forced `status='SUCCESS'` on every new payment (ignoring the model default of `PENDING`)
+2. Auto-marked the parent order as `COMPLETED` when `total_paid >= order.total`
+
+This meant marking a payment as "Done" would silently complete the order, which was not the intended behavior — payment status and order status should be independent.
+
+**Root Cause:** `apps/order_engine/views.py` — `PaymentLogViewSet.perform_create()`
+
+**Before:**
+```python
+def perform_create(self, serializer):
+    payment = serializer.save(status='SUCCESS')
+    order = payment.order
+    total_paid = sum(p.amount for p in order.payments.filter(status='SUCCESS'))
+    if total_paid >= order.total:
+        order.status = 'COMPLETED'
+        order.completed_at = timezone.now()
+        order.save()
+```
+
+**After:**
+```python
+def perform_create(self, serializer):
+    serializer.save()
+```
+
+**Impact:** Payment and order lifecycle are now fully decoupled. New payments default to `PENDING` (model default). Order status is only changed via explicit status update actions.
+
+### Backend Signal Relaxation (Order Transitions)
+
+**Changed:** `apps/order_engine/signals.py` — `VALID_TRANSITIONS`
+
+The strict lifecycle transitions (`PLACED → PREPARING → READY → SERVED → COMPLETED`) were relaxed to allow any status → any other status. This enables the Cashier role to freely change order statuses as needed in real restaurant operations (e.g., reverting a "Ready" order back to "Preparing").
 
 ---
 

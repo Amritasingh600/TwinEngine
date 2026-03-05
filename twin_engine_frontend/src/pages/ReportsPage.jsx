@@ -2,14 +2,25 @@ import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { generateReport, getDailySummaries } from '../services/api';
 import { fmtDate, fmtCurrency } from '../utils/helpers';
+import { ROLES } from '../utils/AuthContext';
 
 export default function ReportsPage() {
-  const { outletId } = useOutletContext();
+  const { outletId, role } = useOutletContext();
   const [reportType, setReportType] = useState('DAILY');
   const [startDate, setStartDate] = useState(fmtDate());
   const [result, setResult] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+
+  /* Only MANAGER can view reports */
+  if (role !== ROLES.MANAGER) {
+    return (
+      <div className="empty-state" style={{ marginTop: 40 }}>
+        <h3>🔒 Access Denied</h3>
+        <p>Reports are available to Managers only.</p>
+      </div>
+    );
+  }
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -27,7 +38,7 @@ export default function ReportsPage() {
 
   return (
     <div>
-      <h2>Reports</h2>
+      <h2>📊 Reports</h2>
 
       <div className="card">
         <h3>Generate AI Report</h3>

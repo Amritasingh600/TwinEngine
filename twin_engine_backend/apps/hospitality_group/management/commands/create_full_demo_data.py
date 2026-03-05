@@ -130,6 +130,8 @@ class Command(BaseCommand):
              'role': 'CHEF', 'phone': '+91-9876543214', 'first_name': 'Vikram', 'last_name': 'Singh'},
             {'username': 'host_demo', 'email': 'host@demo.com', 'password': 'host123', 
              'role': 'HOST', 'phone': '+91-9876543215', 'first_name': 'Sneha', 'last_name': 'Desai'},
+            {'username': 'cashier_demo', 'email': 'cashier@demo.com', 'password': 'cashier123', 
+             'role': 'CASHIER', 'phone': '+91-9876543216', 'first_name': 'Neha', 'last_name': 'Gupta'},
         ]
         
         created_users = {}
@@ -591,10 +593,12 @@ class Command(BaseCommand):
         self.stdout.write(f'   • Daily Summaries: {len(summaries)} days')
         self.stdout.write(f'   • Reports: {len(reports)} reports')
         
-        self.stdout.write(f'\n🔑 Test Credentials:')
-        self.stdout.write(f'   • Manager: manager_demo / manager123')
-        self.stdout.write(f'   • Waiter: waiter1_demo / waiter123')
-        self.stdout.write(f'   • Chef: chef_demo / chef123')
+        self.stdout.write(f'\n\U0001f511 Test Credentials:')
+        self.stdout.write(f'   • Manager:  manager_demo / manager123')
+        self.stdout.write(f'   • Waiter:   waiter1_demo / waiter123')
+        self.stdout.write(f'   • Chef:     chef_demo / chef123')
+        self.stdout.write(f'   • Host:     host_demo / host123')
+        self.stdout.write(f'   • Cashier:  cashier_demo / cashier123')
         
         self.stdout.write(f'\n🌐 Next Steps:')
         self.stdout.write(f'   1. Start server: python manage.py runserver')
