@@ -36,7 +36,7 @@ class SalesDataAdmin(admin.ModelAdmin):
     
     def revenue_display(self, obj):
         """Format revenue with currency symbol."""
-        return format_html('<strong>₹{:,.2f}</strong>', obj.total_revenue)
+        return format_html('<strong>₹{}</strong>', f'{obj.total_revenue:,.2f}')
     revenue_display.short_description = 'Revenue'
     revenue_display.admin_order_field = 'total_revenue'
 
