@@ -13,7 +13,9 @@ from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'twinengine_core.settings')
+# Auto-detect Azure App Service and use deployment settings
+settings_module = 'twinengine_core.deployment' if 'WEBSITE_HOSTNAME' in os.environ else 'twinengine_core.settings'
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', settings_module)
 
 # Initialize Django ASGI application early to ensure the AppRegistry
 # is populated before importing code that may import ORM models.

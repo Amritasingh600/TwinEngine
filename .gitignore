@@ -92,3 +92,5 @@ coverage.xml
 *.tmp
 *.temp
 .cache/
+
+frontend_plan.md
