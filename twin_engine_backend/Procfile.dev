@@ -4,4 +4,5 @@
 
 django:   daphne -b 127.0.0.1 -p 8000 twinengine_core.asgi:application
 celery:   celery -A twinengine_core worker --loglevel=info --pool=solo
+beat:     celery -A twinengine_core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 frontend: cd ../twin_engine_frontend && npm run dev

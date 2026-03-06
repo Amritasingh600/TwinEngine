@@ -81,7 +81,7 @@ def send_inventory_alerts(self, outlet_id: int) -> dict:
     service = PredictionService()
     result = service.get_inventory_alerts(outlet_id)
 
-    low_items = result.get('low_stock_items', [])
+    low_items = result.get('inventory_alerts', [])
     if not low_items:
         logger.info("Outlet %s (%s): no low-stock items.", outlet_id, outlet.name)
         return {"outlet_id": outlet_id, "status": "ok", "low_stock_count": 0}

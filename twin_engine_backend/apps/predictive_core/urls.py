@@ -6,6 +6,7 @@ from .views import (
     FoodDemandPredictionView, InventoryAlertView,
     StaffingPredictionView, RevenuePredictionView,
     PredictionDashboardView, TrainModelsView,
+    SendInventoryAlertView,
 )
 
 router = DefaultRouter()
@@ -25,4 +26,5 @@ urlpatterns = [
     path('predictions/revenue/',          RevenuePredictionView.as_view(),    name='predict-revenue'),
     path('predictions/dashboard/',        PredictionDashboardView.as_view(),  name='predict-dashboard'),
     path('predictions/train/',            TrainModelsView.as_view(),          name='predict-train'),
+    path('predictions/send-inventory-alert/', SendInventoryAlertView.as_view(), name='send-inventory-alert'),
 ]

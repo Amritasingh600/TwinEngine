@@ -126,6 +126,9 @@ export const getStaffing = (outletId, date) =>
 export const trainModels = (outletId) =>
   api.post('/predictions/train/', null, { params: { outlet: outletId, sync: true } });
 
+export const sendInventoryAlert = (outletId) =>
+  api.post('/predictions/send-inventory-alert/', null, { params: { outlet: outletId, sync: true } });
+
 // --- Orders (create) ---
 export const createOrder = (data) => api.post('/orders/', data);
 

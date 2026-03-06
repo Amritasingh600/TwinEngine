@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { getInventory, updateInventoryItem, createInventoryItem, deleteInventoryItem } from '../services/api';
+import { getInventory, updateInventoryItem, createInventoryItem, deleteInventoryItem, sendInventoryAlert } from '../services/api';
 import { ROLES } from '../utils/AuthContext';
 
 const CATEGORIES = [
@@ -40,6 +40,7 @@ export default function InventoryPage() {
   });
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [sendingAlert, setSendingAlert] = useState(false);
 
   const canEdit = role === ROLES.CHEF || role === ROLES.MANAGER;
 
@@ -116,6 +117,25 @@ export default function InventoryPage() {
     }
   };
 
+  const handleSendAlert = async () => {
+    setSendingAlert(true);
+    try {
+      const res = await sendInventoryAlert(outletId);
+      const data = res.data;
+      if (data.status === 'ok' && data.low_stock_count === 0) {
+        toast('No low-stock items — no alert sent', { icon: 'ℹ️' });
+      } else if (data.status === 'sent') {
+        toast.success(`Alert sent! ${data.low_stock_count} low-stock items emailed to ${data.recipient}`);
+      } else {
+        toast.success('Inventory alert processed');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to send inventory alert');
+    } finally {
+      setSendingAlert(false);
+    }
+  };
+
   if (loading) return <div className="spinner-wrap"><div className="spinner" /><span>Loading inventory...</span></div>;
 
   const lowStockCount = items.filter((i) => i.current_quantity <= (i.reorder_threshold || 0)).length;
@@ -124,11 +144,23 @@ export default function InventoryPage() {
     <div>
       <div className="flex-between">
         <h2>📦 Inventory ({items.length} items)</h2>
-        {canEdit && (
-          <button className="btn-sm" onClick={() => setShowAdd(!showAdd)}>
-            {showAdd ? '✕ Close' : '+ Add Item'}
-          </button>
-        )}
+        <div className="flex-row" style={{ gap: 8 }}>
+          {role === ROLES.MANAGER && (
+            <button
+              className="btn-sm"
+              style={{ background: lowStockCount > 0 ? 'var(--danger)' : 'var(--gray-400)' }}
+              onClick={handleSendAlert}
+              disabled={sendingAlert}
+            >
+              {sendingAlert ? 'Sending...' : '📧 Email Low-Stock Alert'}
+            </button>
+          )}
+          {canEdit && (
+            <button className="btn-sm" onClick={() => setShowAdd(!showAdd)}>
+              {showAdd ? '✕ Close' : '+ Add Item'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Summary cards */}

@@ -517,3 +517,56 @@ class TrainModelsView(APIView):
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+class SendInventoryAlertView(APIView):
+    """
+    Trigger an inventory low-stock alert email for an outlet.
+    Runs the inventory predictor and emails any low-stock items
+    to the brand's contact email.
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [TrainingRateThrottle]
+
+    @extend_schema(
+        tags=['Predictions'],
+        summary='Send inventory alert email',
+        parameters=[
+            OpenApiParameter('outlet', OpenApiTypes.INT, description='Outlet ID', required=True),
+        ],
+        request=None,
+        responses={200: TrainResultSerializer, 202: TrainResultSerializer, 400: ErrorResponseSerializer},
+    )
+    def post(self, request):
+        outlet_id = request.query_params.get('outlet')
+        if not outlet_id:
+            return Response(
+                {"error": "outlet query parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            outlet_id = int(outlet_id)
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "outlet must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        run_sync = request.query_params.get('sync', 'false').lower() == 'true'
+
+        if run_sync:
+            from .tasks import send_inventory_alerts
+            result = send_inventory_alerts(outlet_id)
+            return Response(result)
+
+        from .tasks import send_inventory_alerts
+        task = send_inventory_alerts.delay(outlet_id)
+        return Response(
+            {
+                "status": "inventory alert dispatched",
+                "task_id": task.id,
+                "poll_url": f"/api/tasks/{task.id}/",
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )

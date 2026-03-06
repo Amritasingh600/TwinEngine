@@ -35,16 +35,20 @@
             <th>Item</th>
             <th>Category</th>
             <th>Current Qty</th>
-            <th>Reorder At</th>
+            <th>Days Until Stockout</th>
+            <th>Urgency</th>
+            <th>Suggested Order</th>
           </tr>
         </thead>
         <tbody>
           {% for item in low_items %}
           <tr>
-            <td><strong>{{ item.name }}</strong></td>
+            <td><strong>{{ item.item }}</strong></td>
             <td>{{ item.category }}</td>
             <td>{{ item.current_quantity }} {{ item.unit|default:"" }}</td>
-            <td>{{ item.reorder_threshold }} {{ item.unit|default:"" }}</td>
+            <td>{{ item.days_until_stockout }}</td>
+            <td>{{ item.urgency }}</td>
+            <td>{{ item.suggested_order_qty }} {{ item.unit|default:"" }}</td>
           </tr>
           {% endfor %}
         </tbody>
