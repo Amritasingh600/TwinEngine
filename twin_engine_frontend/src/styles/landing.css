@@ -132,16 +132,22 @@
 
 .lp-nav-login {
   padding: 10px 24px;
-  background: #4A4A4A;
-  color: #fff !important;
+  background: #fff;
+  color: #111 !important;
+  border: 1px solid #111;
   border-radius: 50px;
   font-weight: 800;
   font-size: 14px;
-  transition: background 0.2s, box-shadow 0.2s;
+  transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 
-.lp-nav-login:hover { background: #222; }
+.lp-nav-login:hover,
+.lp-nav-login:focus-visible {
+  background: #111;
+  color: #fff !important;
+  border-color: #111;
+}
 
 /* Mobile controls */
 .lp-mob-ctrls {
@@ -156,11 +162,19 @@
 
 .lp-mob-login {
   padding: 8px 18px;
-  background: #4A4A4A;
-  color: #fff;
+  background: #fff;
+  color: #111;
+  border: 1px solid #111;
   border-radius: 50px;
   font-weight: 800;
   font-size: 12px;
+}
+
+.lp-mob-login:hover,
+.lp-mob-login:focus-visible {
+  background: #111;
+  color: #fff;
+  border-color: #111;
 }
 
 .lp-hamburger {

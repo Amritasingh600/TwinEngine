@@ -72,7 +72,7 @@ const STATUS_LIST = [
 
 const FEATURES = [
   {
-    title: 'Real-Time 3D Orchestration',
+    title: 'Real-Time Orchestration',
     description: "A spatial digital twin of your floor plan. Monitor every table's heartbeat in real-time.",
     icon: <LayoutDashboard size={22} color="#4A4A4A" />,
     bg: COLORS.cyan1,
@@ -172,7 +172,7 @@ export default function LandingPage() {
           </h1>
 
           <p className="lp-hero-sub" style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? 'none' : 'translateY(24px)', transition: 'all 0.7s 0.2s' }}>
-            TwinEngine blends 3D visualization with predictive AI to help cafes and hotels master their floor health and operational flow.
+            TwinEngine blends visualization with predictive AI to help cafes and hotels master their floor health and operational flow.
           </p>
 
           <div className="lp-hero-anim" style={{ opacity: isVisible ? 1 : 0, transition: 'opacity 0.7s 0.3s' }}>
@@ -213,7 +213,7 @@ export default function LandingPage() {
                 Visual <span>Status</span> Engine
               </h2>
               <p className="lp-legend-desc">
-                Our 3D twin orchestration replaces confusing tables with a living map. Instantly spot delays, manage turnover, and ensure every guest feels seen.
+                Our twin orchestration replaces confusing tables with a living map. Instantly spot delays, manage turnover, and ensure every guest feels seen.
               </p>
 
               <div className="lp-legend-list">
@@ -291,7 +291,7 @@ export default function LandingPage() {
               <h3>Akshat Gupta</h3>
               <span className="lp-team-role">Systems &amp; Full-Stack Architect</span>
               <p>
-                The engineer behind the 3D-graph architecture and real-time synchronization between the floor and the twin.
+                The engineer behind the architecture and real-time synchronization between the floor and the twin.
               </p>
             </div>
           </div>
@@ -313,22 +313,22 @@ export default function LandingPage() {
                 <div className="lp-contact-tile" style={{ background: '#F0FBFC' }}>
                   <Mail size={28} color="#A5E2E2" />
                   <span className="lp-contact-label">Email</span>
-                  <span className="lp-contact-value">hello@twinengine.ai</span>
+                  <span className="lp-contact-value">amrita.singh_cs.aiml24@gla.ac.in</span>
                 </div>
                 <div className="lp-contact-tile" style={{ background: '#FFE1ED' }}>
                   <Linkedin size={28} color="#E7A4A3" />
                   <span className="lp-contact-label">LinkedIn</span>
-                  <span className="lp-contact-value">/in/twinengine-ai</span>
+                  <span className="lp-contact-value"><a href="https://www.linkedin.com/in/amrita-singh-308333326 ">Click me!</a></span>
                 </div>
                 <div className="lp-contact-tile" style={{ background: '#FFF8F0' }}>
                   <Phone size={28} color="#FF9090" />
                   <span className="lp-contact-label">Contact</span>
-                  <span className="lp-contact-value">+91 98765 43210</span>
+                  <span className="lp-contact-value">+91 9105211531</span>
                 </div>
                 <div className="lp-contact-tile" style={{ background: '#F5F5F5' }}>
                   <MapPin size={28} color="#4A4A4A" />
                   <span className="lp-contact-label">Location</span>
-                  <span className="lp-contact-value">Tech District, IN</span>
+                  <span className="lp-contact-value">GLA University, In</span>
                 </div>
               </div>
             </div>
