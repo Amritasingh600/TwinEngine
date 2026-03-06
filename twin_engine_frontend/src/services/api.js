@@ -14,22 +14,50 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Auto-refresh on 401
+// Auto-refresh on 401 (with lock to prevent parallel refresh attempts)
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+function onRefreshed(newToken) {
+  refreshSubscribers.forEach((cb) => cb(newToken));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(cb) {
+  refreshSubscribers.push(cb);
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (err) => {
     const original = err.config;
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true;
+
+      // If already refreshing, queue this request to retry after refresh completes
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          addRefreshSubscriber((newToken) => {
+            original.headers.Authorization = `Bearer ${newToken}`;
+            resolve(api(original));
+          });
+        });
+      }
+
       const refresh = localStorage.getItem('refresh_token');
       if (refresh) {
+        isRefreshing = true;
         try {
           const { data } = await axios.post(`${API_BASE}/api/auth/token/refresh/`, { refresh });
           localStorage.setItem('access_token', data.access);
           if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
+          isRefreshing = false;
+          onRefreshed(data.access);
           original.headers.Authorization = `Bearer ${data.access}`;
           return api(original);
         } catch {
+          isRefreshing = false;
+          refreshSubscribers = [];
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
           window.location.href = '/login';
@@ -88,6 +116,9 @@ export const getInventoryAlerts = (outletId) =>
 
 export const getStaffing = (outletId, date) =>
   api.get('/predictions/staffing/', { params: { outlet: outletId, date } });
+
+export const trainModels = (outletId) =>
+  api.post('/predictions/train/', null, { params: { outlet: outletId, sync: true } });
 
 // --- Orders (create) ---
 export const createOrder = (data) => api.post('/orders/', data);

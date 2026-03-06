@@ -46,6 +46,15 @@ const PAYMENT_COLOR = {
 const ALL_STATUSES = ['PLACED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED'];
 const ACTIVE_STATUSES = ['PLACED', 'PREPARING', 'READY', 'SERVED'];
 
+/** Safely render an order item — handles both strings and {name, price} objects */
+const formatItem = (item) => {
+  if (typeof item === 'string') return item;
+  if (item && typeof item === 'object' && item.name) {
+    return item.price ? `${item.name} (₹${item.price})` : item.name;
+  }
+  return String(item);
+};
+
 export default function OrdersPage() {
   const { outletId, role } = useOutletContext();
   const [orders, setOrders] = useState([]);
@@ -282,7 +291,7 @@ export default function OrdersPage() {
           {Array.isArray(o.items) && o.items.length > 0 ? (
             <ul className="order-card-items-list">
               {o.items.map((item, i) => (
-                <li key={i}>{item}</li>
+                <li key={i}>{formatItem(item)}</li>
               ))}
             </ul>
           ) : (
@@ -535,7 +544,7 @@ export default function OrdersPage() {
                   </td>
                   <td>{o.party_size}</td>
                   <td className="text-sm" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {Array.isArray(o.items) ? o.items.join(', ') : (o.items || '—')}
+                    {Array.isArray(o.items) ? o.items.map(formatItem).join(', ') : (o.items || '—')}
                   </td>
                   <td style={{ fontWeight: 600 }}>₹{o.total}</td>
                   <td style={{ color: 'var(--gray-500)' }}>{new Date(o.placed_at).toLocaleTimeString()}</td>
