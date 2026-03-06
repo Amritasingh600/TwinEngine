@@ -9,6 +9,8 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Avg, Count
 from django.utils import timezone
 from django.conf import settings
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
 from datetime import datetime, timedelta
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiTypes
 
@@ -301,13 +303,31 @@ class PDFReportViewSet(viewsets.ModelViewSet):
 
             logger.info("Report #%d completed -> %s", report.pk, cloudinary_url)
 
-            # ── Dispatch email notification (same as async path) ──
+            # Send email notification directly (sync path — no need for Celery)
             try:
-                from .tasks import email_report_task
-                email_report_task.delay(report.pk)
-                logger.info("Report email task dispatched for report #%d", report.pk)
-            except Exception as email_err:
-                logger.warning("Could not dispatch email task: %s", email_err)
+                recipient = outlet.brand.contact_email
+                subject = (
+                    f"[TwinEngine] {report_type} Report Ready — "
+                    f"{outlet.name} ({start_date} to {end_date})"
+                )
+                html_body = render_to_string('emails/report_ready.html', {
+                    'report': report,
+                    'outlet': outlet,
+                    'brand': outlet.brand,
+                })
+                plain_body = strip_tags(html_body)
+                from django.core.mail import send_mail as django_send_mail
+                django_send_mail(
+                    subject=subject,
+                    message=plain_body,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[recipient],
+                    html_message=html_body,
+                    fail_silently=False,
+                )
+                logger.info("Report email sent to %s for report #%d.", recipient, report.pk)
+            except Exception as mail_err:
+                logger.warning("Email sending failed (report still saved): %s", mail_err)
 
             return Response(
                 PDFReportSerializer(report).data,
