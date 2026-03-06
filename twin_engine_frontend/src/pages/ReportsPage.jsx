@@ -1,8 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { generateReport, getDailySummaries } from '../services/api';
+import { generateReport, getReports, getReport, getDailySummaries } from '../services/api';
 import { fmtDate, fmtCurrency } from '../utils/helpers';
 import { ROLES } from '../utils/AuthContext';
+
+const TYPE_LABEL = { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly', CUSTOM: 'Custom' };
+const STATUS_BADGE = {
+  COMPLETED: { bg: '#A5E2E2', label: '✓ Completed' },
+  GENERATING: { bg: '#FFAFCC', label: '⏳ Generating' },
+  PENDING: { bg: '#FFE1ED', label: '○ Pending' },
+  FAILED: { bg: '#FF9090', label: '✕ Failed' },
+};
 
 export default function ReportsPage() {
   const { outletId, role } = useOutletContext();
@@ -11,6 +19,13 @@ export default function ReportsPage() {
   const [result, setResult] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+
+  /* Past reports state */
+  const [reports, setReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(true);
+  const [openReportId, setOpenReportId] = useState(null);
+  const [openReportData, setOpenReportData] = useState({});
+  const [loadingDetail, setLoadingDetail] = useState(null);
 
   /* Only MANAGER can view reports */
   if (role !== ROLES.MANAGER) {
@@ -22,6 +37,18 @@ export default function ReportsPage() {
     );
   }
 
+  /* Fetch past reports */
+  const fetchReports = () => {
+    setLoadingReports(true);
+    getReports(outletId)
+      .then((res) => setReports(res.data.results || res.data))
+      .catch(() => {})
+      .finally(() => setLoadingReports(false));
+  };
+
+  useEffect(() => { fetchReports(); }, [outletId]);
+
+  /* Generate a new report */
   const handleGenerate = async () => {
     setGenerating(true);
     setError('');
@@ -29,6 +56,7 @@ export default function ReportsPage() {
     try {
       const { data } = await generateReport(outletId, reportType, startDate);
       setResult(data);
+      fetchReports();             // refresh list
     } catch (err) {
       setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to generate report');
     } finally {
@@ -36,10 +64,34 @@ export default function ReportsPage() {
     }
   };
 
+  /* Open / close a report inline */
+  const handleOpen = async (reportId) => {
+    if (openReportId === reportId) {
+      setOpenReportId(null);
+      return;
+    }
+    /* If already fetched, just toggle */
+    if (openReportData[reportId]) {
+      setOpenReportId(reportId);
+      return;
+    }
+    setLoadingDetail(reportId);
+    try {
+      const { data } = await getReport(reportId);
+      setOpenReportData((prev) => ({ ...prev, [reportId]: data }));
+      setOpenReportId(reportId);
+    } catch {
+      alert('Failed to load report details');
+    } finally {
+      setLoadingDetail(null);
+    }
+  };
+
   return (
     <div>
       <h2>📊 Reports</h2>
 
+      {/* ───── Generate new report ───── */}
       <div className="card">
         <h3>Generate AI Report</h3>
         <div className="flex-row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
@@ -80,29 +132,163 @@ export default function ReportsPage() {
                 <p>{result.gpt_summary}</p>
               </div>
             )}
-            {result.insights?.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <strong>Insights:</strong>
-                <ul>
-                  {result.insights.map((ins, i) => (
-                    <li key={i}>{ins}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {result.recommendations?.length > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <strong>Recommendations:</strong>
-                <ul>
-                  {result.recommendations.map((rec, i) => (
-                    <li key={i}>{rec}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         )}
       </div>
+
+      {/* ───── Past reports list ───── */}
+      <p className="section-title" style={{ marginTop: 24 }}>
+        Past Reports ({reports.length})
+      </p>
+
+      {loadingReports && <p>Loading reports...</p>}
+
+      {!loadingReports && reports.length === 0 && (
+        <div className="empty-state">
+          <h3>No reports yet</h3>
+          <p>Generate your first report above.</p>
+        </div>
+      )}
+
+      {reports.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {reports.map((r) => {
+            const badge = STATUS_BADGE[r.status] || STATUS_BADGE.PENDING;
+            const isOpen = openReportId === r.id;
+            const detail = openReportData[r.id];
+            const isLoadingThis = loadingDetail === r.id;
+
+            return (
+              <div key={r.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                {/* Report header row */}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '14px 18px',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 14, color: 'var(--gray-800)' }}>
+                      {TYPE_LABEL[r.report_type] || r.report_type} Report
+                    </strong>
+                    <span className="text-sm" style={{ color: 'var(--gray-500)' }}>
+                      {r.start_date}{r.end_date && r.end_date !== r.start_date ? ` → ${r.end_date}` : ''}
+                    </span>
+                    <span
+                      className="badge"
+                      style={{ background: badge.bg, color: '#2D2428', fontSize: 11 }}
+                    >
+                      {badge.label}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="text-sm" style={{ color: 'var(--gray-400)' }}>
+                      {new Date(r.created_at).toLocaleDateString()}
+                    </span>
+                    {r.status === 'COMPLETED' && (
+                      <button
+                        className="btn-sm"
+                        onClick={() => handleOpen(r.id)}
+                        disabled={isLoadingThis}
+                        style={{ minWidth: 60 }}
+                      >
+                        {isLoadingThis ? '...' : isOpen ? 'Close' : 'Open'}
+                      </button>
+                    )}
+                    {r.status === 'GENERATING' && (
+                      <span className="text-sm" style={{ color: 'var(--te-mauve-deep)' }}>Processing...</span>
+                    )}
+                    {r.status === 'FAILED' && (
+                      <span className="text-sm" style={{ color: '#FF9090' }}>Failed</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expanded report detail */}
+                {isOpen && detail && (
+                  <div
+                    style={{
+                      padding: '0 18px 18px',
+                      borderTop: '1px solid var(--gray-100)',
+                      background: 'var(--gray-50)',
+                    }}
+                  >
+                    {/* Summary */}
+                    {detail.gpt_summary && (
+                      <div style={{ marginTop: 14 }}>
+                        <strong style={{ fontSize: 13, color: 'var(--gray-700)' }}>Executive Summary</strong>
+                        <p style={{ marginTop: 4, fontSize: 13, lineHeight: 1.6, color: 'var(--gray-700)' }}>
+                          {detail.gpt_summary}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Insights */}
+                    {detail.insights?.length > 0 && (
+                      <div style={{ marginTop: 14 }}>
+                        <strong style={{ fontSize: 13, color: 'var(--gray-700)' }}>📌 Insights</strong>
+                        <ul style={{ margin: '6px 0 0 18px', fontSize: 13, lineHeight: 1.7, color: 'var(--gray-700)' }}>
+                          {detail.insights.map((ins, i) => (
+                            <li key={i}>{ins}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Recommendations */}
+                    {detail.recommendations?.length > 0 && (
+                      <div style={{ marginTop: 14 }}>
+                        <strong style={{ fontSize: 13, color: 'var(--gray-700)' }}>💡 Recommendations</strong>
+                        <ul style={{ margin: '6px 0 0 18px', fontSize: 13, lineHeight: 1.7, color: 'var(--gray-700)' }}>
+                          {detail.recommendations.map((rec, i) => (
+                            <li key={i}>{rec}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* PDF download link */}
+                    {detail.cloudinary_url && (
+                      <div style={{ marginTop: 14 }}>
+                        <a
+                          href={detail.cloudinary_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 14px',
+                            background: 'var(--te-cyan)',
+                            color: '#2D2428',
+                            borderRadius: 8,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                          }}
+                        >
+                          📄 Download PDF
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Metadata */}
+                    <p className="text-sm" style={{ marginTop: 12, color: 'var(--gray-400)' }}>
+                      Generated by {detail.generated_by || 'AI'}
+                      {detail.completed_at && ` · Completed ${new Date(detail.completed_at).toLocaleString()}`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

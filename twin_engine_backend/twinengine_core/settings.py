@@ -481,6 +481,8 @@ LOGGING = {
 # ---------------------------------------------------------------
 # Celery Configuration (background task processing)
 # ---------------------------------------------------------------
+import platform as _platform
+
 CELERY_BROKER_URL = _REDIS_URL or 'redis://localhost:6379/0'
 CELERY_RESULT_BACKEND = 'django-db'          # django_celery_results
 CELERY_RESULT_EXTENDED = True                 # store task args / kwargs in DB
@@ -491,6 +493,11 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60             # hard kill after 30 min
 CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60        # soft warning at 25 min
+
+# Windows does not support the prefork pool (billiard PermissionError).
+# Use 'solo' on Windows for local dev; production (Linux) uses 'prefork'.
+if _platform.system() == 'Windows':
+    CELERY_WORKER_POOL = 'solo'
 
 # Celery Beat — periodic task schedule
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getPredictionDashboard, getBusyHours, getRevenue, getStaffing, trainModels } from '../services/api';
+import { getPredictionDashboard, getBusyHours, getRevenue, getStaffing, generateData, trainModels } from '../services/api';
 import { fmtDate, fmtCurrency } from '../utils/helpers';
 import { ROLES } from '../utils/AuthContext';
 
@@ -15,6 +15,14 @@ export default function PredictionsPage() {
   const [training, setTraining] = useState(false);
   const [error, setError] = useState('');
   const [trainMsg, setTrainMsg] = useState('');
+
+  // Generate data state
+  const [genDate, setGenDate] = useState(fmtDate());
+  const [genOrderCount, setGenOrderCount] = useState(40);
+  const [genDays, setGenDays] = useState(14);
+  const [generating, setGenerating] = useState(false);
+  const [genResult, setGenResult] = useState(null);
+  const [genError, setGenError] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -76,6 +84,24 @@ export default function PredictionsPage() {
 
   useEffect(() => { if (outletId) load(); }, [outletId, date]);
 
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setGenError('');
+    setGenResult(null);
+    try {
+      const { data } = await generateData(outletId, genDate, genOrderCount, genDays);
+      setGenResult(data);
+      // Refresh predictions after generating data
+      load();
+    } catch (err) {
+      setGenError(
+        err.response?.data?.error || 'Failed to generate data. Check console for details.'
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   /* Only MANAGER can view predictions */
   if (role !== ROLES.MANAGER) {
     return (
@@ -109,6 +135,70 @@ export default function PredictionsPage() {
       <div className="flex-between">
         <h2>🤖 ML Predictions</h2>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+      </div>
+
+      {/* ── Generate Data Section ── */}
+      <div className="card" style={{ marginTop: 12, border: '1px solid #E0E7FF', background: '#F5F3FF' }}>
+        <h3 style={{ margin: '0 0 8px' }}>⚡ Generate Restaurant Data</h3>
+        <p className="text-sm" style={{ color: '#6B7280', margin: '0 0 12px' }}>
+          Generate multi-day historical data across all tables: orders, payments, inventory
+          depletion, staff schedules, hourly sales data &amp; daily summaries — enough for
+          ML predictions &amp; reports.
+        </p>
+        <div className="flex-row" style={{ gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
+          <label>
+            Date
+            <input type="date" value={genDate} onChange={(e) => setGenDate(e.target.value)} />
+          </label>
+          <label>
+            Orders/Day
+            <input
+              type="number" min="5" max="200" value={genOrderCount}
+              onChange={(e) => setGenOrderCount(Number(e.target.value))}
+              style={{ width: 80 }}
+            />
+          </label>
+          <label>
+            Days
+            <input
+              type="number" min="1" max="30" value={genDays}
+              onChange={(e) => setGenDays(Number(e.target.value))}
+              style={{ width: 60 }}
+            />
+          </label>
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            style={{
+              background: generating ? '#9CA3AF' : '#4F46E5',
+              color: '#fff',
+              fontWeight: 600,
+              padding: '8px 20px',
+              border: 'none',
+              borderRadius: 8,
+              cursor: generating ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {generating ? 'Generating...' : 'Generate'}
+          </button>
+        </div>
+
+        {genError && <p className="text-error" style={{ marginTop: 8 }}>{genError}</p>}
+
+        {genResult && (
+          <div style={{ marginTop: 12, padding: 12, background: '#ECFDF5', borderRadius: 8, fontSize: 14 }}>
+            <p style={{ fontWeight: 600, color: '#065F46', margin: '0 0 6px' }}>
+              ✅ {genResult.message}
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 4 }}>
+              {Object.entries(genResult.created || {}).map(([key, val]) => (
+                <span key={key} style={{ color: '#374151' }}>
+                  <strong>{key.replace(/_/g, ' ')}:</strong> {val}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {loading && <p>Loading predictions...</p>}

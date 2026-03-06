@@ -1,7 +1,7 @@
 import logging
 from io import BytesIO
 
-from rest_framework import viewsets, status, filters
+from rest_framework import viewsets, status, filters, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -604,3 +604,110 @@ class DailyReportView(APIView):
                 },
                 status=status.HTTP_404_NOT_FOUND
             )
+
+
+class GenerateDataView(APIView):
+    """
+    Generate realistic synthetic data for an outlet.
+    Populates all database tables: tables, orders, payments,
+    inventory, staff schedules, sales data, and daily summaries.
+
+    POST /api/generate-data/
+    Body: { "outlet_id": 1, "date": "2026-03-06", "order_count": 40 }
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        tags=['Data Generation'],
+        summary='Generate synthetic restaurant data for an outlet',
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'outlet_id': {'type': 'integer', 'description': 'Outlet ID'},
+                    'date': {'type': 'string', 'format': 'date', 'description': 'End date of the range (YYYY-MM-DD)'},
+                    'order_count': {'type': 'integer', 'description': 'Base orders per day (default 40)'},
+                    'days': {'type': 'integer', 'description': 'Number of days of history to generate (default 14)'},
+                },
+                'required': ['outlet_id'],
+            }
+        },
+        responses={200: {'type': 'object'}},
+    )
+    def post(self, request):
+        from apps.hospitality_group.models import Outlet
+        from .data_generator import generate_outlet_data
+
+        # Validate user is a manager
+        if not request.user.is_superuser:
+            if not hasattr(request.user, 'profile') or request.user.profile.role != 'MANAGER':
+                return Response(
+                    {'error': 'Only managers can generate data.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        outlet_id = request.data.get('outlet_id')
+        if not outlet_id:
+            return Response(
+                {'error': 'outlet_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            outlet = Outlet.objects.get(pk=outlet_id)
+        except Outlet.DoesNotExist:
+            return Response(
+                {'error': f'Outlet {outlet_id} not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Parse optional date
+        target_date = None
+        date_str = request.data.get('date')
+        if date_str:
+            try:
+                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {'error': 'Invalid date format. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        order_count = request.data.get('order_count', 40)
+        try:
+            order_count = int(order_count)
+            if order_count < 1 or order_count > 200:
+                raise ValueError
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'order_count must be an integer between 1 and 200.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        days = request.data.get('days', 14)
+        try:
+            days = int(days)
+            if days < 1 or days > 30:
+                raise ValueError
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'days must be an integer between 1 and 30.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            results = generate_outlet_data(outlet_id, target_date, order_count, days)
+        except Exception as e:
+            logger.exception("Data generation failed")
+            return Response(
+                {'error': f'Data generation failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response({
+            'message': f'Data generated successfully for {outlet.name}',
+            'outlet_id': outlet.id,
+            'outlet_name': outlet.name,
+            'date': str(target_date or timezone.now().date()),
+            'created': results,
+        })

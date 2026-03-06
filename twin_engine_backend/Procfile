@@ -2,5 +2,5 @@
 # Uses Daphne (ASGI) for WebSocket support
 
 web: daphne -b 0.0.0.0 -p ${PORT:-8000} --proxy-headers twinengine_core.asgi:application
-worker: celery -A twinengine_core worker --loglevel=info --concurrency=2
+worker: celery -A twinengine_core worker --loglevel=info --concurrency=2 --pool=prefork
 beat: celery -A twinengine_core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler

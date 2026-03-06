@@ -3,5 +3,5 @@
 #   or:  make dev
 
 django:   python manage.py runserver
-celery:   celery -A twinengine_core worker --loglevel=info
+celery:   celery -A twinengine_core worker --loglevel=info --pool=solo
 frontend: cd ../twin_engine_frontend && npm run dev

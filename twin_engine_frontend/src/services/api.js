@@ -161,7 +161,22 @@ export const generateReport = (outletId, reportType, startDate) =>
     start_date: startDate,
   });
 
+export const getReports = (outletId) =>
+  api.get('/reports/', { params: { outlet: outletId, ordering: '-created_at' } });
+
+export const getReport = (reportId) =>
+  api.get(`/reports/${reportId}/`);
+
 export const getDailySummaries = (outletId) =>
   api.get('/summaries/', { params: { outlet: outletId } });
+
+// --- Data Generation ---
+export const generateData = (outletId, date, orderCount = 40, days = 14) =>
+  api.post('/generate-data/', {
+    outlet_id: outletId,
+    date,
+    order_count: orderCount,
+    days,
+  });
 
 export default api;

@@ -68,7 +68,7 @@ class PDFReportListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = PDFReport
-        fields = ['id', 'outlet_name', 'report_type', 'start_date', 'end_date', 'status', 'created_at']
+        fields = ['id', 'outlet_name', 'report_type', 'start_date', 'end_date', 'status', 'cloudinary_url', 'gpt_summary', 'created_at']
 
 
 class ReportGenerateSerializer(serializers.Serializer):
