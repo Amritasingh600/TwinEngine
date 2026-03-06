@@ -43,11 +43,11 @@ const ROLE_LABELS = {
 };
 
 const ROLE_COLORS = {
-  [ROLES.MANAGER]: '#4F46E5',
-  [ROLES.CHEF]: '#EA580C',
-  [ROLES.CASHIER]: '#059669',
-  [ROLES.HOST]: '#7C3AED',
-  [ROLES.WAITER]: '#D97706',
+  [ROLES.MANAGER]: '#E7A4A3',
+  [ROLES.CHEF]: '#FF9090',
+  [ROLES.CASHIER]: '#A5E2E2',
+  [ROLES.HOST]: '#FFAFCC',
+  [ROLES.WAITER]: '#DFBEBF',
 };
 
 export default function OutletLayout() {
@@ -65,7 +65,7 @@ export default function OutletLayout() {
   return (
     <div>
       <header className="topbar">
-        <Link to="/" className="topbar-brand">TwinEngine</Link>
+        <Link to="/dashboard" className="topbar-brand">TwinEngine</Link>
         <nav className="topbar-nav">
           {navItems.map((n) => (
             <Link key={n.to} to={`/outlet/${outletId}/${n.to}`}>
@@ -80,7 +80,7 @@ export default function OutletLayout() {
             className="profile-trigger"
             onClick={() => setShowProfile(!showProfile)}
           >
-            <span className="profile-avatar" style={{ background: roleColor }}>
+            <span className="profile-avatar" style={{ background: roleColor, color: '#2D2428' }}>
               {firstName[0]?.toUpperCase() || '?'}
             </span>
             <div className="profile-info">
@@ -94,7 +94,7 @@ export default function OutletLayout() {
           {showProfile && (
             <div className="profile-dropdown">
               <div className="profile-dropdown-header">
-                <span className="profile-avatar-lg" style={{ background: roleColor }}>
+                <span className="profile-avatar-lg" style={{ background: roleColor, color: '#2D2428' }}>
                   {firstName[0]?.toUpperCase() || '?'}
                 </span>
                 <div>
@@ -109,7 +109,7 @@ export default function OutletLayout() {
               <div className="profile-dropdown-body">
                 <div className="profile-row">
                   <span className="text-sm">Role</span>
-                  <span className="badge" style={{ background: roleColor, color: '#fff' }}>{roleLabel}</span>
+                  <span className="badge" style={{ background: roleColor, color: '#2D2428' }}>{roleLabel}</span>
                 </div>
                 {outletName && (
                   <div className="profile-row">
@@ -125,7 +125,7 @@ export default function OutletLayout() {
                 )}
               </div>
               <div className="profile-dropdown-footer">
-                <Link to="/" className="profile-link" onClick={() => setShowProfile(false)}>
+                <Link to="/dashboard" className="profile-link" onClick={() => setShowProfile(false)}>
                   ← Switch Outlet
                 </Link>
                 <button onClick={logout} className="btn-logout">

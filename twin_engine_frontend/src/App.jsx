@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth, ROLES } from './utils/AuthContext';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import OutletLayout from './pages/OutletLayout';
@@ -34,14 +35,19 @@ function RoleRoute({ allowedRoles, children }) {
 function AppRoutes() {
   const { user, loading } = useAuth();
 
+  if (loading) return <p>Loading...</p>;
+
   return (
     <Routes>
+      {/* Public landing page */}
+      <Route path="/" element={<LandingPage />} />
+
       <Route
         path="/login"
-        element={user && !loading ? <Navigate to="/" replace /> : <LoginPage />}
+        element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />}
       />
       <Route
-        path="/"
+        path="/dashboard"
         element={
           <ProtectedRoute>
             <DashboardPage />

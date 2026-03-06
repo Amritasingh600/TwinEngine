@@ -1,10 +1,10 @@
-/** Map node status to hex color */
+/** Map node status to hex color — TwinEngine pastel palette */
 export const STATUS_COLORS = {
-  BLUE: '#3B82F6',
-  RED: '#EF4444',
-  GREEN: '#22C55E',
-  YELLOW: '#F59E0B',
-  GREY: '#6B7280',
+  BLUE: '#A3F8F8',
+  RED: '#FF9090',
+  GREEN: '#A5E2E2',
+  YELLOW: '#FFAFCC',
+  GREY: '#DFBEBF',
 };
 
 export const STATUS_LABELS = {

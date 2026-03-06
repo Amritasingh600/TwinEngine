@@ -40,7 +40,7 @@ export default function LoginPage() {
         setBusy(false);
         return;
       }
-      navigate('/');
+      navigate('/dashboard');
     } catch {
       setError('Invalid credentials');
     } finally {
@@ -51,10 +51,10 @@ export default function LoginPage() {
   return (
     <div className="page-center">
       <form onSubmit={handleSubmit} className="login-card">
-        <h2 style={{ marginBottom: 4 }}>◆ TwinEngine</h2>
+        <h2 style={{ marginBottom: 4, color: '#2D2428' }}>◆ TwinEngine</h2>
         <p className="login-sub">Sign in to your dashboard</p>
 
-        {error && <p className="text-error" style={{ textAlign: 'center' }}>{error}</p>}
+        {error && <p className="text-error" style={{ textAlign: 'center', color: '#FF9090' }}>{error}</p>}
 
         <label>
           Role
@@ -83,7 +83,7 @@ export default function LoginPage() {
           />
         </label>
 
-        <button type="submit" disabled={busy} style={{ marginTop: 8 }}>
+        <button type="submit" disabled={busy}>
           {busy ? 'Signing in...' : 'Sign In'}
         </button>
       </form>

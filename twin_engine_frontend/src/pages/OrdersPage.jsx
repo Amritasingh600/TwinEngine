@@ -4,12 +4,12 @@ import { getOrders, updateOrderStatus, createOrder, getNodes, createPayment, get
 import { ROLES } from '../utils/AuthContext';
 
 const STATUS_COLOR = {
-  PLACED: '#D97706',
-  PREPARING: '#EA580C',
-  READY: '#7C3AED',
-  SERVED: '#059669',
-  COMPLETED: '#4F46E5',
-  CANCELLED: '#6B7280',
+  PLACED: '#FFAFCC',
+  PREPARING: '#FF9090',
+  READY: '#A5E2E2',
+  SERVED: '#A3F8F8',
+  COMPLETED: '#E7A4A3',
+  CANCELLED: '#DFBEBF',
 };
 
 const STATUS_ICON = {
@@ -31,8 +31,8 @@ const STATUS_LABEL = {
 };
 
 const PAYMENT_COLOR = {
-  PENDING: '#D97706',
-  SUCCESS: '#059669',
+  PENDING: '#FFAFCC',
+  SUCCESS: '#A5E2E2',
 };
 
 /*
@@ -269,7 +269,7 @@ export default function OrdersPage() {
         className={`order-card${isUrgent ? ' order-card-urgent' : ''}`}
       >
         {/* Status bar at top */}
-        <div className="order-card-status-bar" style={{ background: STATUS_COLOR[o.status] }}>
+        <div className="order-card-status-bar" style={{ background: STATUS_COLOR[o.status], color: '#2D2428' }}>
           <span>{STATUS_ICON[o.status]} {STATUS_LABEL[o.status]}</span>
           <span>{elapsed}m ago</span>
         </div>
@@ -537,7 +537,7 @@ export default function OrdersPage() {
                   <td>
                     <span
                       className="badge"
-                      style={{ background: STATUS_COLOR[o.status] || '#888', color: '#fff' }}
+                      style={{ background: STATUS_COLOR[o.status] || '#DFBEBF', color: '#2D2428' }}
                     >
                       {STATUS_ICON[o.status] || ''} {STATUS_LABEL[o.status]}
                     </span>

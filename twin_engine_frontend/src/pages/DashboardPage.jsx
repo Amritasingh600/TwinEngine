@@ -29,11 +29,11 @@ const ROLE_DESCRIPTIONS = {
 };
 
 const ROLE_COLORS = {
-  [ROLES.MANAGER]: '#4F46E5',
-  [ROLES.CHEF]: '#EA580C',
-  [ROLES.CASHIER]: '#059669',
-  [ROLES.HOST]: '#7C3AED',
-  [ROLES.WAITER]: '#D97706',
+  [ROLES.MANAGER]: '#E7A4A3',
+  [ROLES.CHEF]: '#FF9090',
+  [ROLES.CASHIER]: '#A5E2E2',
+  [ROLES.HOST]: '#FFAFCC',
+  [ROLES.WAITER]: '#DFBEBF',
 };
 
 export default function DashboardPage() {
@@ -61,7 +61,7 @@ export default function DashboardPage() {
         <h1>◆ TwinEngine</h1>
         <div className="profile-area">
           <div className="profile-trigger">
-            <span className="profile-avatar" style={{ background: roleColor }}>
+            <span className="profile-avatar" style={{ background: roleColor, color: '#2D2428' }}>
               {firstName[0]?.toUpperCase() || '?'}
             </span>
             <div className="profile-info">

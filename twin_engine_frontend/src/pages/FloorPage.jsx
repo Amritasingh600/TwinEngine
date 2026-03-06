@@ -160,7 +160,7 @@ export default function FloorPage() {
                 className="badge"
                 style={{
                   background: STATUS_COLORS[n.current_status],
-                  color: '#fff',
+                  color: '#2D2428',
                   alignSelf: 'flex-start',
                 }}
               >
@@ -175,6 +175,7 @@ export default function FloorPage() {
                       className={`status-btn${n.current_status === opt.key ? ' active' : ''}`}
                       style={{
                         background: opt.color,
+                        color: '#2D2428',
                         opacity: n.current_status === opt.key ? 1 : 0.55,
                       }}
                       onClick={() => handleStatusChange(n.id, opt.key)}

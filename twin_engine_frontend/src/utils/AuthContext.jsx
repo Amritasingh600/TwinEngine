@@ -59,4 +59,10 @@ export function AuthProvider({ children }) {
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  // During HMR or before provider mounts, context can be null.
+  // Return a safe default so destructuring never crashes.
+  if (!ctx) return { user: null, loading: true, login: () => {}, logout: () => {}, role: null, hasRole: () => false };
+  return ctx;
+};
