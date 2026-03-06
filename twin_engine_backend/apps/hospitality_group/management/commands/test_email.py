@@ -52,10 +52,43 @@ class Command(BaseCommand):
                 fail_silently=False,
             )
             self.stdout.write(self.style.SUCCESS(
-                f"✅ Email sent successfully! (send_mail returned {count})"
+                f"✅ Mailtrap email sent! (send_mail returned {count})"
             ))
             self.stdout.write(self.style.SUCCESS(
                 "Check your Mailtrap inbox at https://mailtrap.io/inboxes"
             ))
         except Exception as exc:
-            self.stdout.write(self.style.ERROR(f"❌ Email failed: {exc}"))
+            self.stdout.write(self.style.ERROR(f"❌ Mailtrap email failed: {exc}"))
+
+        # ── Gmail copy ──
+        gmail_email = getattr(settings, 'GMAIL_EMAIL', '')
+        gmail_password = getattr(settings, 'GMAIL_APP_PASSWORD', '')
+        if gmail_email and gmail_password:
+            self.stdout.write(f"\nGmail config:")
+            self.stdout.write(f"  GMAIL_EMAIL = {gmail_email}")
+            try:
+                import smtplib, ssl
+                from email.mime.multipart import MIMEMultipart
+                from email.mime.text import MIMEText
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = '[TwinEngine] Test Email ✅ (Gmail)'
+                msg['From'] = gmail_email
+                msg['To'] = gmail_email
+                msg.attach(MIMEText('Gmail delivery is working!', 'plain'))
+                msg.attach(MIMEText(
+                    '<div style="font-family:sans-serif;padding:24px;">'
+                    '<h2 style="color:#2980b9;">TwinEngine Test Email ✅ (Gmail)</h2>'
+                    '<p>Gmail dual delivery is working correctly.</p></div>',
+                    'html',
+                ))
+                ctx = ssl.create_default_context()
+                with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx) as srv:
+                    srv.login(gmail_email, gmail_password)
+                    srv.sendmail(gmail_email, gmail_email, msg.as_string())
+                self.stdout.write(self.style.SUCCESS(
+                    f"✅ Gmail email sent to {gmail_email}!"
+                ))
+            except Exception as exc:
+                self.stdout.write(self.style.ERROR(f"❌ Gmail failed: {exc}"))
+        else:
+            self.stdout.write("\n⚠️  Gmail not configured (GMAIL_EMAIL / GMAIL_APP_PASSWORD missing).")

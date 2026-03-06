@@ -515,6 +515,12 @@ EMAIL_USE_SSL = False
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@twinengine.io')
 
 # ---------------------------------------------------------------
+# Gmail SMTP — dual delivery (real inbox copy alongside Mailtrap)
+# ---------------------------------------------------------------
+GMAIL_EMAIL = os.getenv('GMAIL_EMAIL', '')
+GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD', '')
+
+# ---------------------------------------------------------------
 # Django Axes — Brute-force login protection
 # ---------------------------------------------------------------
 AUTHENTICATION_BACKENDS = [

@@ -170,4 +170,26 @@ def email_report_task(self, report_id: int) -> dict:
         logger.error("Report email failed: %s", exc, exc_info=True)
         raise self.retry(exc=exc)
 
+    # ── Gmail copy (dual delivery) ──
+    import smtplib, ssl
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    gmail_email = getattr(settings, 'GMAIL_EMAIL', '')
+    gmail_password = getattr(settings, 'GMAIL_APP_PASSWORD', '')
+    if gmail_email and gmail_password:
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = subject
+            msg['From'] = gmail_email
+            msg['To'] = gmail_email
+            msg.attach(MIMEText(plain_body, 'plain'))
+            msg.attach(MIMEText(html_body, 'html'))
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx) as srv:
+                srv.login(gmail_email, gmail_password)
+                srv.sendmail(gmail_email, gmail_email, msg.as_string())
+            logger.info("Gmail copy sent for report #%d.", report_id)
+        except Exception as gmail_err:
+            logger.warning("Gmail copy failed: %s", gmail_err)
+
     return {"report_id": report_id, "status": "email_sent", "recipient": recipient}
