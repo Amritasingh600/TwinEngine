@@ -253,14 +253,14 @@ export default function InventoryPage() {
                         style={canEdit ? { cursor: 'pointer', textDecoration: 'underline dotted' } : {}}
                         onClick={() => canEdit && startEdit(item)}
                       >
-                        {item.current_quantity}
+                        {parseFloat(Number(item.current_quantity).toFixed(1))}
                       </span>
                     )}
                   </td>
                   <td>{item.unit}</td>
-                  <td>{item.reorder_threshold}</td>
-                  <td>{item.par_level}</td>
-                  <td>₹{item.unit_cost}</td>
+                  <td>{parseFloat(Number(item.reorder_threshold).toFixed(1))}</td>
+                  <td>{parseFloat(Number(item.par_level).toFixed(1))}</td>
+                  <td>₹{parseFloat(Number(item.unit_cost).toFixed(2))}</td>
                   <td>
                     <span
                       className="badge"

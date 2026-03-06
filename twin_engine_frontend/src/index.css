@@ -107,7 +107,7 @@ body {
 }
 
 .topbar-brand::before {
-  content: '\u25C6';
+  content: '\25C6';
   font-size: 14px;
   color: var(--te-mauve-deep);
 }

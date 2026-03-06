@@ -526,8 +526,8 @@ class PDFReportViewSet(viewsets.ModelViewSet):
             for item in low_items[:10]:
                 inv_rows.append([
                     item['name'], item['category'],
-                    f"{item['current_quantity']} {item.get('unit', '')}",
-                    f"{item['reorder_threshold']} {item.get('unit', '')}",
+                    f"{round(item['current_quantity'], 1)} {item.get('unit', '')}",
+                    f"{round(item['reorder_threshold'], 1)} {item.get('unit', '')}",
                 ])
             inv_table = Table(inv_rows, colWidths=[120, 90, 100, 100])
             inv_table.setStyle(TableStyle([

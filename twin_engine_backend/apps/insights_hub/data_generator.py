@@ -473,9 +473,9 @@ def _ensure_inventory(outlet, target_date):
             defaults={
                 'category': category,
                 'unit': unit,
-                'current_quantity': random.uniform(40, 100),
-                'reorder_threshold': random.uniform(5, 15),
-                'par_level': random.uniform(50, 100),
+                'current_quantity': round(random.uniform(40, 100), 1),
+                'reorder_threshold': round(random.uniform(5, 15), 1),
+                'par_level': round(random.uniform(50, 100), 1),
                 'unit_cost': Decimal(str(cost)),
                 'expiry_date': target_date + timedelta(days=random.randint(5, 30)),
                 'last_restocked': timezone.now() - timedelta(days=random.randint(0, 3)),
@@ -543,7 +543,7 @@ def _consume_inventory(outlet, orders, current_date):
     for item in InventoryItem.objects.filter(outlet=outlet):
         used = consumption.get(item.name, 0)
         if used > 0:
-            item.current_quantity = max(0, item.current_quantity - used)
+            item.current_quantity = round(max(0, item.current_quantity - used), 1)
             item.save(update_fields=['current_quantity'])
 
 
