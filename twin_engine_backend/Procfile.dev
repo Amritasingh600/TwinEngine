@@ -2,6 +2,6 @@
 # Usage: honcho -f Procfile.dev start
 #   or:  make dev
 
-django:   python manage.py runserver
+django:   daphne -b 127.0.0.1 -p 8000 twinengine_core.asgi:application
 celery:   celery -A twinengine_core worker --loglevel=info --pool=solo
 frontend: cd ../twin_engine_frontend && npm run dev

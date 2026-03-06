@@ -16,6 +16,7 @@ const ROLE_NAV = {
     { to: 'orders', label: 'Orders', icon: '📦' },
     { to: 'predictions', label: 'Predictions', icon: '🤖' },
     { to: 'inventory', label: 'Inventory', icon: '📦' },
+    { to: 'schedule', label: 'Schedule', icon: '📅' },
     { to: 'reports', label: 'Reports', icon: '📊' },
   ],
   [ROLES.CHEF]: [

@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getPredictionDashboard, getBusyHours, getRevenue, getStaffing, generateData, trainModels } from '../services/api';
+import toast from 'react-hot-toast';
+import {
+  BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from 'recharts';
+import {
+  getPredictionDashboard, getBusyHours, getRevenue, getStaffing,
+  getFootfall, getFoodDemand, getInventoryAlerts,
+  generateData, trainModels,
+} from '../services/api';
 import { fmtDate, fmtCurrency } from '../utils/helpers';
 import { ROLES } from '../utils/AuthContext';
+
+const PIE_COLORS = ['#E7A4A3', '#A5E2E2', '#FFAFCC', '#FF9090', '#A3F8F8', '#DFBEBF', '#FFC7DD', '#FFE1ED'];
 
 export default function PredictionsPage() {
   const { outletId, role } = useOutletContext();
@@ -11,6 +22,9 @@ export default function PredictionsPage() {
   const [busyHours, setBusyHours] = useState(null);
   const [revenue, setRevenue] = useState(null);
   const [staffing, setStaffing] = useState(null);
+  const [footfall, setFootfall] = useState(null);
+  const [foodDemand, setFoodDemand] = useState(null);
+  const [invAlertsDirect, setInvAlertsDirect] = useState(null);
   const [loading, setLoading] = useState(false);
   const [training, setTraining] = useState(false);
   const [error, setError] = useState('');
@@ -30,25 +44,26 @@ export default function PredictionsPage() {
     setTrainMsg('');
     const errors = [];
     try {
-      const [d, b, r, s] = await Promise.all([
+      const [d, b, r, s, f, fd, ia] = await Promise.all([
         getPredictionDashboard(outletId, date).catch((e) => { errors.push(e); return null; }),
         getBusyHours(outletId, date).catch((e) => { errors.push(e); return null; }),
         getRevenue(outletId, date).catch((e) => { errors.push(e); return null; }),
         getStaffing(outletId, date).catch((e) => { errors.push(e); return null; }),
+        getFootfall(outletId, date).catch(() => null),
+        getFoodDemand(outletId, date).catch(() => null),
+        getInventoryAlerts(outletId).catch(() => null),
       ]);
 
-      const dData = d?.data;
-      const bData = b?.data;
-      const rData = r?.data;
-      const sData = s?.data;
-
-      setDashboard(dData ?? null);
-      setBusyHours(bData ?? null);
-      setRevenue(rData ?? null);
-      setStaffing(sData ?? null);
+      setDashboard(d?.data ?? null);
+      setBusyHours(b?.data ?? null);
+      setRevenue(r?.data ?? null);
+      setStaffing(s?.data ?? null);
+      setFootfall(f?.data ?? null);
+      setFoodDemand(fd?.data ?? null);
+      setInvAlertsDirect(ia?.data ?? null);
 
       /* Check if everything came back as fallback/error dicts */
-      const allFallback = dData?.fallback || (!dData && errors.length > 0);
+      const allFallback = d?.data?.fallback || (!d?.data && errors.length > 0);
       if (allFallback) {
         setError('ML models may not be trained yet. Click "Train Models" to initialise them.');
       } else if (errors.length === 4) {
@@ -73,9 +88,11 @@ export default function PredictionsPage() {
         ? '✅ Models trained successfully! Refreshing predictions...'
         : '⏳ Training dispatched. Refresh in a minute.');
       if (data.status === 'training complete') {
+        toast.success('Models trained successfully!');
         setTimeout(load, 1500);
       }
     } catch (e) {
+      toast.error('Training failed');
       setTrainMsg('❌ Training failed: ' + (e.response?.data?.error || e.message));
     } finally {
       setTraining(false);
@@ -91,12 +108,11 @@ export default function PredictionsPage() {
     try {
       const { data } = await generateData(outletId, genDate, genOrderCount, genDays);
       setGenResult(data);
-      // Refresh predictions after generating data
+      toast.success('Data generated successfully');
       load();
     } catch (err) {
-      setGenError(
-        err.response?.data?.error || 'Failed to generate data. Check console for details.'
-      );
+      setGenError(err.response?.data?.error || 'Failed to generate data.');
+      toast.error('Generation failed');
     } finally {
       setGenerating(false);
     }
@@ -118,9 +134,34 @@ export default function PredictionsPage() {
     ?? dashboard?.revenue?.next_day?.predicted_revenue
     ?? null;
 
-  /* Helper: inventory alerts array (backend key is "inventory_alerts") */
-  const invAlerts = dashboard?.inventory_alerts?.inventory_alerts ?? [];
-  const expiringSoon = dashboard?.inventory_alerts?.expiring_soon ?? [];
+  /* Helper: inventory alerts — prefer direct endpoint, fallback to dashboard */
+  const invAlerts = invAlertsDirect?.inventory_alerts
+    ?? dashboard?.inventory_alerts?.inventory_alerts ?? [];
+  const expiringSoon = invAlertsDirect?.expiring_soon
+    ?? dashboard?.inventory_alerts?.expiring_soon ?? [];
+
+  /* Chart data transforms */
+  const busyChartData = busyHours?.hourly_forecast?.map((h) => ({
+    hour: `${h.hour}:00`,
+    orders: h.predicted_orders,
+  })) ?? [];
+
+  const revenueChartData = revenue?.next_week?.daily_breakdown?.map((d) => ({
+    date: d.date.slice(5),
+    revenue: Math.round(d.predicted_revenue),
+  })) ?? [];
+
+  const footfallChartData = (footfall?.hourly_guests || dashboard?.footfall?.hourly_guests)?.map((h) => ({
+    hour: `${h.hour}:00`,
+    guests: h.predicted_guests,
+  })) ?? [];
+
+  const foodDemandChartData = foodDemand?.food_demand
+    ? Object.entries(foodDemand.food_demand).map(([name, qty]) => ({
+        name,
+        value: typeof qty === 'number' ? qty : qty?.predicted_quantity ?? 0,
+      }))
+    : [];
 
   /* Helper: convert staffing_recommendation object → array */
   const shiftRows = staffing?.staffing_recommendation
@@ -201,7 +242,7 @@ export default function PredictionsPage() {
         )}
       </div>
 
-      {loading && <p>Loading predictions...</p>}
+      {loading && <div className="spinner-wrap"><div className="spinner" /><span>Loading predictions...</span></div>}
       {error && <p className="text-error" style={{ margin: '12px 0' }}>{error}</p>}
       {trainMsg && <p style={{ margin: '12px 0', color: trainMsg.startsWith('❌') ? '#FF9090' : '#4EB89D' }}>{trainMsg}</p>}
 
@@ -224,92 +265,66 @@ export default function PredictionsPage() {
         <>
           {/* Summary cards */}
           <div className="grid-3" style={{ marginTop: 12 }}>
-            <SummaryCard
-              title="Predicted Footfall"
-              value={dashboard.footfall?.total_predicted_guests ?? '-'}
-            />
-            <SummaryCard
-              title="Predicted Revenue"
-              value={totalRevenue != null ? fmtCurrency(totalRevenue) : '-'}
-            />
-            <SummaryCard
-              title="Inventory Alerts"
-              value={dashboard.inventory_alerts?.total_alerts ?? invAlerts.length}
-            />
+            <SummaryCard title="Predicted Footfall"
+              value={footfall?.total_predicted_guests ?? dashboard.footfall?.total_predicted_guests ?? '-'} />
+            <SummaryCard title="Predicted Revenue"
+              value={totalRevenue != null ? fmtCurrency(totalRevenue) : '-'} />
+            <SummaryCard title="Inventory Alerts"
+              value={invAlerts.length} />
           </div>
 
-          {/* Busy hours */}
-          {busyHours?.hourly_forecast && (
-            <Section title="Busy Hours">
+          {/* ── Busy Hours (Bar Chart) ── */}
+          {busyChartData.length > 0 && (
+            <Section title="Busy Hours Forecast">
               <p style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 6 }}>
                 Peak hour: <strong>{busyHours.peak_hour}:00</strong> &nbsp;|&nbsp;
-                Total predicted orders: <strong>{busyHours.total_predicted_orders}</strong> &nbsp;|&nbsp;
+                Total orders: <strong>{busyHours.total_predicted_orders}</strong> &nbsp;|&nbsp;
                 Confidence: <strong>{busyHours.confidence}</strong>
               </p>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Hour</th>
-                    <th>Predicted Orders</th>
-                    <th>Intensity</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {busyHours.hourly_forecast.map((h) => {
-                    const pct = busyHours.total_predicted_orders
-                      ? h.predicted_orders / busyHours.total_predicted_orders
-                      : 0;
-                    const isBusy = pct > 0.08;
-                    return (
-                      <tr key={h.hour}>
-                        <td>{h.hour}:00</td>
-                        <td>{h.predicted_orders}</td>
-                        <td>
-                          <span
-                            className="badge"
-                            style={{
-                              background: isBusy ? '#FF9090' : '#A5E2E2',
-                              color: '#2D2428',
-                            }}
-                          >
-                            {isBusy ? 'Busy' : 'Slow'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div style={{ width: '100%', height: 260 }}>
+                <ResponsiveContainer>
+                  <BarChart data={busyChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0e0e0" />
+                    <XAxis dataKey="hour" tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="orders" name="Predicted Orders" fill="#E7A4A3" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </Section>
           )}
 
-          {/* Revenue forecast */}
-          {revenue?.next_week?.daily_breakdown && (
+          {/* ── Revenue Forecast (Line Chart + Table) ── */}
+          {revenueChartData.length > 0 && (
             <Section title="Revenue Forecast (Next 7 Days)">
               <p style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 6 }}>
                 Today: <strong>{fmtCurrency(revenue.next_day?.predicted_revenue ?? 0)}</strong> &nbsp;|&nbsp;
                 Week total: <strong>{fmtCurrency(revenue.next_week?.total_predicted_revenue ?? 0)}</strong>
               </p>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Predicted Revenue</th>
-                  </tr>
-                </thead>
+              <div style={{ width: '100%', height: 260 }}>
+                <ResponsiveContainer>
+                  <LineChart data={revenueChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0e0e0" />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v) => `₹${v.toLocaleString('en-IN')}`} />
+                    <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#E7A4A3" strokeWidth={2} dot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <table className="data-table" style={{ marginTop: 12 }}>
+                <thead><tr><th>Date</th><th>Predicted Revenue</th></tr></thead>
                 <tbody>
                   {revenue.next_week.daily_breakdown.map((d) => (
-                    <tr key={d.date}>
-                      <td>{d.date}</td>
-                      <td>{fmtCurrency(d.predicted_revenue)}</td>
-                    </tr>
+                    <tr key={d.date}><td>{d.date}</td><td>{fmtCurrency(d.predicted_revenue)}</td></tr>
                   ))}
                 </tbody>
               </table>
             </Section>
           )}
 
-          {/* Staffing */}
+          {/* ── Staffing ── */}
           {shiftRows.length > 0 && (
             <Section title="Staffing Recommendations">
               <p style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 6 }}>
@@ -341,7 +356,7 @@ export default function PredictionsPage() {
             </Section>
           )}
 
-          {/* Inventory alerts */}
+          {/* ── Inventory Alerts ── */}
           {invAlerts.length > 0 && (
             <Section title="Inventory Alerts">
               <table className="data-table">
@@ -395,30 +410,45 @@ export default function PredictionsPage() {
             </Section>
           )}
 
-          {/* Footfall by hour */}
-          {dashboard.footfall?.hourly_guests && (
+          {/* ── Footfall (Area Chart) ── */}
+          {footfallChartData.length > 0 && (
             <Section title="Hourly Footfall Forecast">
               <p style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 6 }}>
-                Total guests: <strong>{dashboard.footfall.total_predicted_guests}</strong> &nbsp;|&nbsp;
-                Avg party size: <strong>{dashboard.footfall.avg_party_size}</strong> &nbsp;|&nbsp;
-                Confidence: <strong>{dashboard.footfall.confidence}</strong>
+                Total guests: <strong>{footfall?.total_predicted_guests ?? dashboard.footfall?.total_predicted_guests}</strong> &nbsp;|&nbsp;
+                Avg party: <strong>{footfall?.avg_party_size ?? dashboard.footfall?.avg_party_size}</strong> &nbsp;|&nbsp;
+                Confidence: <strong>{footfall?.confidence ?? dashboard.footfall?.confidence}</strong>
               </p>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Hour</th>
-                    <th>Predicted Guests</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboard.footfall.hourly_guests.map((h) => (
-                    <tr key={h.hour}>
-                      <td>{h.hour}:00</td>
-                      <td>{h.predicted_guests}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div style={{ width: '100%', height: 260 }}>
+                <ResponsiveContainer>
+                  <AreaChart data={footfallChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0e0e0" />
+                    <XAxis dataKey="hour" tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Area type="monotone" dataKey="guests" name="Guests" fill="#A5E2E2" stroke="#4EB89D" fillOpacity={0.4} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </Section>
+          )}
+
+          {/* ── Food Demand (Pie Chart) ── */}
+          {foodDemandChartData.length > 0 && (
+            <Section title="Predicted Food Demand">
+              <div style={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie data={foodDemandChartData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                      outerRadius={100} label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                      {foodDemandChartData.map((_, i) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             </Section>
           )}
         </>

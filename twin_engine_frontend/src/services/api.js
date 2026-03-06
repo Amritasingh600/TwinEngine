@@ -90,6 +90,12 @@ export const updateNodeStatus = (nodeId, status) =>
 // --- Orders ---
 export const getOrders = (params) => api.get('/orders/', { params });
 
+export const getActiveOrders = (outletId) =>
+  api.get('/orders/active/', { params: { outlet: outletId } });
+
+export const getKitchenQueue = (outletId) =>
+  api.get('/orders/kitchen_queue/', { params: { outlet: outletId } });
+
 export const getOrder = (id) => api.get(`/orders/${id}/`);
 
 export const updateOrderStatus = (id, newStatus) =>
@@ -167,8 +173,31 @@ export const getReports = (outletId) =>
 export const getReport = (reportId) =>
   api.get(`/reports/${reportId}/`);
 
+export const deleteReport = (reportId) =>
+  api.delete(`/reports/${reportId}/`);
+
 export const getDailySummaries = (outletId) =>
   api.get('/summaries/', { params: { outlet: outletId } });
+
+// --- Schedules ---
+export const getSchedules = (params) => api.get('/schedules/', { params });
+
+export const createSchedule = (data) => api.post('/schedules/', data);
+
+export const updateSchedule = (scheduleId, data) =>
+  api.patch(`/schedules/${scheduleId}/`, data);
+
+export const getTodaySchedules = (outletId) =>
+  api.get('/schedules/today/', { params: { outlet: outletId } });
+
+export const getStaffSchedules = (staffId) =>
+  api.get('/schedules/by-staff/', { params: { staff_id: staffId } });
+
+export const checkInSchedule = (scheduleId) =>
+  api.post(`/schedules/${scheduleId}/check-in/`);
+
+export const checkOutSchedule = (scheduleId) =>
+  api.post(`/schedules/${scheduleId}/check-out/`);
 
 // --- Data Generation ---
 export const generateData = (outletId, date, orderCount = 40, days = 14) =>

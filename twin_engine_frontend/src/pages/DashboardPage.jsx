@@ -53,7 +53,7 @@ export default function DashboardPage() {
   const username = user?.user?.username || user?.username || 'User';
   const roleColor = ROLE_COLORS[role] || 'var(--primary)';
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <div className="spinner-wrap"><div className="spinner" /><span>Loading outlets...</span></div>;
 
   return (
     <div>

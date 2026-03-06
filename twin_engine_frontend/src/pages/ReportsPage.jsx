@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { generateReport } from '../services/api';
+import toast from 'react-hot-toast';
+import { generateReport, getReports, deleteReport } from '../services/api';
 import { fmtDate } from '../utils/helpers';
 import { ROLES } from '../utils/AuthContext';
 
@@ -11,6 +12,19 @@ export default function ReportsPage() {
   const [result, setResult] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [expanded, setExpanded] = useState(null);
+
+  const fetchHistory = () => {
+    setHistoryLoading(true);
+    getReports(outletId)
+      .then((res) => setHistory(res.data.results || res.data || []))
+      .catch(() => {})
+      .finally(() => setHistoryLoading(false));
+  };
+
+  useEffect(() => { if (outletId) fetchHistory(); }, [outletId]);
 
   /* Only MANAGER can view reports */
   if (role !== ROLES.MANAGER) {
@@ -29,8 +43,12 @@ export default function ReportsPage() {
     try {
       const { data } = await generateReport(outletId, reportType, startDate);
       setResult(data);
+      toast.success('Report generated');
+      fetchHistory();
     } catch (err) {
-      setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to generate report');
+      const msg = err.response?.data?.detail || err.response?.data?.error || 'Failed to generate report';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setGenerating(false);
     }
@@ -153,6 +171,99 @@ export default function ReportsPage() {
           )}
         </div>
       )}
+
+      {/* ───── Report History ───── */}
+      <div style={{ marginTop: 24 }}>
+        <h3>📋 Report History</h3>
+        {historyLoading && <div className="spinner-wrap"><div className="spinner" /><span>Loading history...</span></div>}
+        {!historyLoading && history.length === 0 && (
+          <p className="text-hint" style={{ marginTop: 8 }}>No reports generated yet.</p>
+        )}
+        {!historyLoading && history.length > 0 && (
+          <table className="data-table" style={{ marginTop: 8 }}>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Date Range</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((r) => (
+                <>
+                  <tr key={r.id}>
+                    <td style={{ fontWeight: 500 }}>{r.report_type}</td>
+                    <td>{r.start_date}{r.end_date && r.end_date !== r.start_date ? ` → ${r.end_date}` : ''}</td>
+                    <td>
+                      <span className="badge" style={{
+                        background: r.status === 'COMPLETED' ? '#A5E2E2' : r.status === 'FAILED' ? '#FF9090' : '#FFAFCC',
+                        color: '#2D2428', fontSize: 11,
+                      }}>
+                        {r.status}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--gray-500)' }}>
+                      {new Date(r.created_at).toLocaleDateString()}
+                    </td>
+                    <td>
+                      <div className="flex-row" style={{ gap: 4 }}>
+                        {r.cloudinary_url && (
+                          <a href={r.cloudinary_url} target="_blank" rel="noopener noreferrer"
+                            className="btn-sm" style={{ textDecoration: 'none', fontSize: 11 }}>
+                            PDF
+                          </a>
+                        )}
+                        <button className="btn-sm" style={{ fontSize: 11 }}
+                          onClick={() => setExpanded(expanded === r.id ? null : r.id)}>
+                          {expanded === r.id ? 'Hide' : 'View'}
+                        </button>
+                        <button className="btn-sm" style={{ background: 'var(--danger)', fontSize: 11 }}
+                          onClick={async () => {
+                            if (!window.confirm('Delete this report?')) return;
+                            try { await deleteReport(r.id); toast.success('Report deleted'); fetchHistory(); }
+                            catch { toast.error('Failed to delete'); }
+                          }}>
+                          ✕
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {expanded === r.id && (
+                    <tr key={`${r.id}-detail`}>
+                      <td colSpan={5} style={{ background: '#FAFAFA', padding: 16 }}>
+                        {r.gpt_summary && (
+                          <div style={{ marginBottom: 12 }}>
+                            <strong style={{ fontSize: 13 }}>Summary</strong>
+                            <p style={{ fontSize: 13, lineHeight: 1.7, marginTop: 4 }}>{r.gpt_summary}</p>
+                          </div>
+                        )}
+                        {r.insights?.length > 0 && (
+                          <div style={{ marginBottom: 12 }}>
+                            <strong style={{ fontSize: 13 }}>Insights</strong>
+                            <ul style={{ margin: '4px 0 0 18px', fontSize: 13, lineHeight: 1.7 }}>
+                              {r.insights.map((ins, i) => <li key={i}>{ins}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        {r.recommendations?.length > 0 && (
+                          <div>
+                            <strong style={{ fontSize: 13 }}>Recommendations</strong>
+                            <ul style={{ margin: '4px 0 0 18px', fontSize: 13, lineHeight: 1.7 }}>
+                              {r.recommendations.map((rec, i) => <li key={i}>{rec}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

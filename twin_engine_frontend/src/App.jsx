@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth, ROLES } from './utils/AuthContext';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
@@ -9,13 +10,12 @@ import OrdersPage from './pages/OrdersPage';
 import PredictionsPage from './pages/PredictionsPage';
 import InventoryPage from './pages/InventoryPage';
 import ReportsPage from './pages/ReportsPage';
+import SchedulePage from './pages/SchedulePage';
 
 /* Redirect unauthenticated users to login */
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return <p>Loading...</p>;
-  if (!user) return <Navigate to="/login" replace />;
-  return children;
+  if (loading) return <div className="spinner-wrap"><div className="spinner" /><span>Loading...</span></div>;  if (!user) return <Navigate to="/login" replace />;  return children;
 }
 
 /*
@@ -35,10 +35,8 @@ function RoleRoute({ allowedRoles, children }) {
 function AppRoutes() {
   const { user, loading } = useAuth();
 
-  if (loading) return <p>Loading...</p>;
-
-  return (
-    <Routes>
+  if (loading) return <div className="spinner-wrap"><div className="spinner" /><span>Loading...</span></div>;
+  return (    <Routes>
       {/* Public landing page */}
       <Route path="/" element={<LandingPage />} />
 
@@ -107,6 +105,14 @@ function AppRoutes() {
             </RoleRoute>
           }
         />
+        <Route
+          path="schedule"
+          element={
+            <RoleRoute allowedRoles={[ROLES.MANAGER]}>
+              <SchedulePage />
+            </RoleRoute>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -118,6 +124,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       </AuthProvider>
     </BrowserRouter>
   );

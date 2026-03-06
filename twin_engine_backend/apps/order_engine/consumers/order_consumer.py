@@ -1,6 +1,19 @@
 import json
+from decimal import Decimal
+from datetime import datetime, date
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+
+
+def _json_default(obj):
+    """Handle datetime and Decimal serialisation for WebSocket payloads."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, date):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        return float(obj)
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
 
 class OrderConsumer(AsyncWebsocketConsumer):
@@ -31,7 +44,7 @@ class OrderConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({
                 'type': 'active_orders',
                 'orders': active_orders
-            }))
+            }, default=_json_default))
     
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
@@ -49,14 +62,14 @@ class OrderConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({
                 'type': 'active_orders',
                 'orders': orders
-            }))
+            }, default=_json_default))
     
     async def order_created(self, event):
         """Handle new order broadcast."""
         await self.send(text_data=json.dumps({
             'type': 'order_created',
             'order': event['order'],
-        }))
+        }, default=_json_default))
     
     async def order_updated(self, event):
         """Handle order status update broadcast."""
@@ -67,7 +80,7 @@ class OrderConsumer(AsyncWebsocketConsumer):
             'new_status': event['new_status'],
             'table_id': event.get('table_id'),
             'timestamp': event.get('timestamp'),
-        }))
+        }, default=_json_default))
     
     async def order_completed(self, event):
         """Handle order completion broadcast."""
@@ -76,7 +89,7 @@ class OrderConsumer(AsyncWebsocketConsumer):
             'order_id': event['order_id'],
             'table_id': event.get('table_id'),
             'total': event.get('total'),
-        }))
+        }, default=_json_default))
     
     @database_sync_to_async
     def get_active_orders(self):
@@ -90,7 +103,7 @@ class OrderConsumer(AsyncWebsocketConsumer):
             table__outlet_id=self.outlet_id,
             status__in=['PLACED', 'PREPARING', 'READY', 'SERVED']
         ).select_related('table', 'waiter').values(
-            'id', 'status', 'guest_count', 'total',
+            'id', 'status', 'party_size', 'total',
             'placed_at', 'table__id', 'table__name',
             'waiter__user__username'
         )

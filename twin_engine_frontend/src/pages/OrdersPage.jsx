@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getOrders, updateOrderStatus, createOrder, getNodes, createPayment, getPayments, updatePayment } from '../services/api';
+import toast from 'react-hot-toast';
+import { getOrders, getActiveOrders, updateOrderStatus, createOrder, getNodes, createPayment, getPayments, updatePayment } from '../services/api';
 import { ROLES } from '../utils/AuthContext';
+import { useOrderSocket } from '../utils/useOrderSocket';
 
 const STATUS_COLOR = {
   PLACED: '#FFAFCC',
@@ -57,6 +59,7 @@ const formatItem = (item) => {
 
 export default function OrdersPage() {
   const { outletId, role } = useOutletContext();
+  const { wsConnected, requestRefresh: wsRefresh } = useOrderSocket(outletId);
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -86,9 +89,15 @@ export default function OrdersPage() {
 
   /* ─── Fetch orders ─── */
   const fetchOrders = () => {
-    const params = { table__outlet: outletId, ordering: '-placed_at' };
-    if (filter) params.status = filter;
-    getOrders(params)
+    // Chef: use active endpoint (only non-completed/cancelled)
+    const promise = isChef && !filter
+      ? getActiveOrders(outletId)
+      : (() => {
+          const params = { table__outlet: outletId, ordering: '-placed_at' };
+          if (filter) params.status = filter;
+          return getOrders(params);
+        })();
+    promise
       .then((res) => {
         let data = res.data.results || res.data;
         setOrders(data);
@@ -148,10 +157,11 @@ export default function OrdersPage() {
       await updateOrderStatus(orderId, newStatus);
       setActionMap((prev) => ({ ...prev, [orderId]: '' }));
       fetchOrders();
+      wsRefresh();
       // Refresh table list so completed orders free up tables
       if (canCreateOrder) fetchTables();
     } catch (err) {
-      alert(err.response?.data?.detail || err.response?.data?.status?.[0] || 'Failed');
+      toast.error(err.response?.data?.detail || err.response?.data?.status?.[0] || 'Failed to update status');
     }
   };
 
@@ -164,7 +174,7 @@ export default function OrdersPage() {
         await updatePayment(existing.id, { status: 'PENDING' });
         fetchPayments();
       } catch {
-        alert('Failed to update payment');
+        toast.error('Failed to update payment');
       }
     } else if (existing && existing.status === 'PENDING') {
       // Mark as done
@@ -172,7 +182,7 @@ export default function OrdersPage() {
         await updatePayment(existing.id, { status: 'SUCCESS' });
         fetchPayments();
       } catch {
-        alert('Failed to update payment');
+        toast.error('Failed to update payment');
       }
     } else {
       // No payment yet — create one as PENDING, user toggles to mark Done
@@ -184,7 +194,7 @@ export default function OrdersPage() {
         });
         fetchPayments();
       } catch {
-        alert('Failed to create payment');
+        toast.error('Failed to create payment');
       }
     }
   };
@@ -209,8 +219,9 @@ export default function OrdersPage() {
       setNewOrder({ table: '', party_size: 1, customer_name: '', items: '', special_requests: '', subtotal: 0, tax: 0, total: 0 });
       fetchOrders();
       fetchTables();
+      toast.success('Order created');
     } catch (err) {
-      alert(err.response?.data?.detail || JSON.stringify(err.response?.data) || 'Failed to create order');
+      toast.error(err.response?.data?.detail || JSON.stringify(err.response?.data) || 'Failed to create order');
     } finally {
       setCreating(false);
     }
@@ -232,10 +243,12 @@ export default function OrdersPage() {
   };
 
   const canAdvance = (order) => {
-    if (isReadOnly) return false;
+    if (isWaiter) return false;
     const next = NEXT_STATUS[order.status];
     if (!next) return false;
     if (isManager) return true;
+    // Chef can advance PLACED → PREPARING and PREPARING → READY
+    if (isChef && (order.status === 'PLACED' || order.status === 'PREPARING')) return true;
     return false;
   };
 
@@ -313,67 +326,67 @@ export default function OrdersPage() {
             {new Date(o.placed_at).toLocaleTimeString()}
           </span>
         </div>
+
+        {/* Chef action buttons */}
+        {canAdvance(o) && (
+          <button
+            className="btn-sm"
+            style={{ marginTop: 8, width: '100%', background: STATUS_COLOR[NEXT_STATUS[o.status]], fontWeight: 600 }}
+            onClick={() => handleStatus(o.id, NEXT_STATUS[o.status])}
+          >
+            {NEXT_LABEL[o.status]}
+          </button>
+        )}
       </div>
     );
   };
 
-  if (loading) return <p style={{ padding: 20 }}>Loading orders...</p>;
+  if (loading) return <div className="spinner-wrap"><div className="spinner" /><span>Loading orders...</span></div>;
 
   /* ═══════════════════════════════════════════
    *  CHEF VIEW — card-based kitchen display
    * ═══════════════════════════════════════════ */
   if (isChef) {
-    const activeOrders = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
-    const completedOrders = orders.filter((o) => !ACTIVE_STATUSES.includes(o.status));
+    // Only show today's active orders — filter out stale orders from previous days
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const activeOrders = orders.filter((o) =>
+      ACTIVE_STATUSES.includes(o.status) &&
+      (o.placed_at || '').slice(0, 10) === todayStr
+    );
 
     return (
       <div>
         <div className="flex-between">
           <h2>👨‍🍳 Kitchen Orders</h2>
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ minWidth: 140 }}>
-            <option value="">All Orders</option>
-            {ALL_STATUSES.map((s) => (
-              <option key={s} value={s}>{STATUS_LABEL[s]}</option>
-            ))}
-          </select>
+          <div className="flex-row" style={{ gap: 8 }}>
+            <span className={wsConnected ? 'badge badge-green' : 'badge badge-orange'}>
+              {wsConnected ? '● Live' : '● Connecting...'}
+            </span>
+            <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ minWidth: 140 }}>
+              <option value="">Active Orders</option>
+              {['PLACED', 'PREPARING', 'READY'].map((s) => (
+                <option key={s} value={s}>{STATUS_LABEL[s]}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <p className="text-hint">
-          🔄 Auto-refreshes every 15s · {activeOrders.length} active · {completedOrders.length} completed/cancelled
+          🔄 Auto-refreshes every 15s · {activeOrders.length} active order{activeOrders.length !== 1 ? 's' : ''}
         </p>
 
-        {orders.length === 0 && (
+        {activeOrders.length === 0 && (
           <div className="empty-state">
-            <h3>🍳 No orders yet!</h3>
-            <p>Orders will appear here once they are placed.</p>
-          </div>
-        )}
-
-        {/* Active orders — prominent */}
-        {activeOrders.length > 0 && (
-          <>
-            <h3 style={{ margin: '16px 0 8px', color: 'var(--primary)' }}>🔥 Active Orders ({activeOrders.length})</h3>
-            <div className="order-card-grid">
-              {activeOrders.map((o) => renderChefCard(o))}
-            </div>
-          </>
-        )}
-
-        {activeOrders.length === 0 && completedOrders.length > 0 && (
-          <div className="empty-state" style={{ padding: '20px' }}>
             <h3>🍳 Kitchen is clear!</h3>
-            <p>No active orders right now. Completed orders shown below.</p>
+            <p>No active orders right now. New orders will appear automatically.</p>
           </div>
         )}
 
-        {/* Completed/Cancelled orders — dimmed */}
-        {completedOrders.length > 0 && (
-          <>
-            <h3 style={{ margin: '24px 0 8px', color: 'var(--gray-400)' }}>📋 Past Orders ({completedOrders.length})</h3>
-            <div className="order-card-grid" style={{ opacity: 0.6 }}>
-              {completedOrders.map((o) => renderChefCard(o))}
-            </div>
-          </>
+        {/* Active orders — grouped by status */}
+        {activeOrders.length > 0 && (
+          <div className="order-card-grid">
+            {activeOrders.map((o) => renderChefCard(o))}
+          </div>
         )}
       </div>
     );
@@ -387,6 +400,9 @@ export default function OrdersPage() {
       <div className="flex-between">
         <h2>📦 Orders</h2>
         <div className="flex-row" style={{ gap: 8 }}>
+          <span className={wsConnected ? 'badge badge-green' : 'badge badge-orange'}>
+            {wsConnected ? '● Live' : '● Connecting...'}
+          </span>
           <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ minWidth: 140 }}>
             <option value="">All Statuses</option>
             {filterStatuses.map((s) => (

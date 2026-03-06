@@ -1,8 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 
-const WS_BASE =
-  import.meta.env.VITE_WS_URL ||
-  `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
+function getWsBase() {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  // In production, derive from API URL (same origin)
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    const u = new URL(apiUrl);
+    return `${u.protocol === 'https:' ? 'wss' : 'ws'}://${u.host}`;
+  }
+  // Dev: connect to Django backend directly (Vite proxy doesn't reliably proxy WS)
+  return 'ws://127.0.0.1:8000';
+}
 
 /**
  * Hook for WebSocket connection to floor status stream.
@@ -16,13 +24,26 @@ export function useFloorSocket(outletId) {
   useEffect(() => {
     if (!outletId) return;
 
-    const url = `${WS_BASE}/ws/floor/${outletId}/`;
-    ws.current = new WebSocket(url);
+    let active = true;
+    const url = `${getWsBase()}/ws/floor/${outletId}/`;
+    const socket = new WebSocket(url);
+    ws.current = socket;
 
-    ws.current.onopen = () => setConnected(true);
-    ws.current.onclose = () => setConnected(false);
+    socket.addEventListener('open', () => {
+      if (active) {
+        setConnected(true);
+      } else {
+        // Strict Mode unmounted before open — close now that handshake is done
+        socket.close();
+      }
+    });
 
-    ws.current.onmessage = (e) => {
+    socket.addEventListener('close', () => {
+      if (active) setConnected(false);
+    });
+
+    socket.addEventListener('message', (e) => {
+      if (!active) return;
       const msg = JSON.parse(e.data);
       if (msg.type === 'floor_state') {
         setNodes(msg.nodes);
@@ -33,10 +54,14 @@ export function useFloorSocket(outletId) {
           )
         );
       }
-    };
+    });
 
     return () => {
-      ws.current?.close();
+      active = false;
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CLOSING) {
+        socket.close();
+      }
+      // If still CONNECTING, the open handler above will close it
     };
   }, [outletId]);
 

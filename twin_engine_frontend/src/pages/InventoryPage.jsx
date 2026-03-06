@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { getInventory, updateInventoryItem, createInventoryItem, deleteInventoryItem } from '../services/api';
 import { ROLES } from '../utils/AuthContext';
 
@@ -67,8 +68,9 @@ export default function InventoryPage() {
         )
       );
       setEditingId(null);
+      toast.success('Quantity updated');
     } catch {
-      alert('Failed to update quantity');
+      toast.error('Failed to update quantity');
     }
   };
 
@@ -92,8 +94,9 @@ export default function InventoryPage() {
       setShowAdd(false);
       setNewItem({ name: '', category: 'DRY', unit: 'KG', current_quantity: 0, reorder_threshold: 10, par_level: 50, unit_cost: 0 });
       fetchItems();
+      toast.success('Item added');
     } catch (err) {
-      alert(err.response?.data?.detail || JSON.stringify(err.response?.data) || 'Failed');
+      toast.error(err.response?.data?.detail || JSON.stringify(err.response?.data) || 'Failed');
     } finally {
       setAdding(false);
     }
@@ -105,14 +108,15 @@ export default function InventoryPage() {
     try {
       await deleteInventoryItem(itemId);
       setItems((prev) => prev.filter((i) => i.id !== itemId));
+      toast.success('Item removed');
     } catch {
-      alert('Failed to delete item');
+      toast.error('Failed to delete item');
     } finally {
       setDeleting(null);
     }
   };
 
-  if (loading) return <p>Loading inventory...</p>;
+  if (loading) return <div className="spinner-wrap"><div className="spinner" /><span>Loading inventory...</span></div>;
 
   const lowStockCount = items.filter((i) => i.current_quantity <= (i.reorder_threshold || 0)).length;
 
