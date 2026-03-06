@@ -164,4 +164,13 @@ export const generateReport = (outletId, reportType, startDate) =>
 export const getDailySummaries = (outletId) =>
   api.get('/summaries/', { params: { outlet: outletId } });
 
+// --- Data Generation ---
+export const generateData = (outletId, date, orderCount = 40, days = 14) =>
+  api.post('/generate-data/', {
+    outlet_id: outletId,
+    date,
+    order_count: orderCount,
+    days,
+  });
+
 export default api;
