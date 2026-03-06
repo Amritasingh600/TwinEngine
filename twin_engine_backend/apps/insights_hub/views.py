@@ -301,6 +301,14 @@ class PDFReportViewSet(viewsets.ModelViewSet):
 
             logger.info("Report #%d completed -> %s", report.pk, cloudinary_url)
 
+            # ── Dispatch email notification (same as async path) ──
+            try:
+                from .tasks import email_report_task
+                email_report_task.delay(report.pk)
+                logger.info("Report email task dispatched for report #%d", report.pk)
+            except Exception as email_err:
+                logger.warning("Could not dispatch email task: %s", email_err)
+
             return Response(
                 PDFReportSerializer(report).data,
                 status=status.HTTP_201_CREATED,
