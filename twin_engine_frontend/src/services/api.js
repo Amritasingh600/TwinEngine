@@ -155,7 +155,7 @@ export const updateStaffMember = (staffId, data) =>
 
 // --- Reports ---
 export const generateReport = (outletId, reportType, startDate) =>
-  api.post('/reports/generate/', {
+  api.post('/reports/generate/?sync=true', {
     outlet_id: outletId,
     report_type: reportType,
     start_date: startDate,
