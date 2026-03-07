@@ -38,12 +38,12 @@ ORDER_TO_TABLE_STATUS = {
 ALL_ORDER_STATUSES = ['PLACED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED']
 VALID_TRANSITIONS = {
     None: ['PLACED'],                                    # New order
-    'PLACED': ['PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED'],
+    'PLACED': ['PREPARING', 'READY', 'SERVED', 'CANCELLED'],
     'PREPARING': ['PLACED', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED'],
     'READY': ['PLACED', 'PREPARING', 'SERVED', 'COMPLETED', 'CANCELLED'],
     'SERVED': ['PLACED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'],
-    'COMPLETED': ['PLACED', 'PREPARING', 'READY', 'SERVED', 'CANCELLED'],
-    'CANCELLED': ['PLACED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'],
+    'COMPLETED': [],                                     # Terminal state
+    'CANCELLED': [],                                     # Terminal state
 }
 
 
