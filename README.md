@@ -412,3 +412,9 @@ All models use scikit-learn, trained on outlet-specific SalesData, and are seria
 - Azure OpenAI API Documentation
 - Django REST Framework Guides
 - WebSocket Implementation Patterns
+
+
+deployed frontend on azure urls is : https://twinengine34.azurewebsites.net/
+deployed backend on render url is : https://twinengine-backend.onrender.com
+
+now service is accessible on : https://twinengine34.azurewebsites.net/ 
