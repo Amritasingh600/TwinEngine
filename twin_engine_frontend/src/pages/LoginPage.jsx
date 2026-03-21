@@ -54,6 +54,25 @@ export default function LoginPage() {
         <h2 style={{ marginBottom: 4, color: '#2D2428' }}>◆ TwinEngine</h2>
         <p className="login-sub">Sign in to your dashboard</p>
 
+        {/* Demo Credentials Note */}
+        <div style={{
+          background: '#FFE1ED',
+          border: '1px solid #FFAFCC',
+          borderRadius: 8,
+          padding: '12px 14px',
+          marginBottom: 16,
+          fontSize: 13,
+          color: '#2D2428',
+        }}>
+          <p style={{ margin: '0 0 8px 0', fontWeight: 600 }}>🧪 Demo Credentials</p>
+          <p style={{ margin: '4px 0' }}><strong>Manager:</strong> manager_demo / manager123</p>
+          <p style={{ margin: '4px 0' }}><strong>Chef:</strong> chef_demo / chef123</p>
+          <p style={{ margin: '4px 0' }}><strong>Cashier:</strong> cashier_demo / cashier123</p>
+          <p style={{ margin: '4px 0' }}><strong>Host:</strong> host_demo / host123</p>
+          <p style={{ margin: '4px 0' }}><strong>Waiter:</strong> waiter_demo / waiter123</p>
+          <p style={{ margin: '8px 0 0 0', fontStyle: 'italic', opacity: 0.8 }}>* For demo purposes only</p>
+        </div>
+
         {error && <p className="text-error" style={{ textAlign: 'center', color: '#FF9090' }}>{error}</p>}
 
         <label>
