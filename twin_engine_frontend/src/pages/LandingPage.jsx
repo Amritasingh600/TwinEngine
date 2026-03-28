@@ -269,7 +269,7 @@ export default function LandingPage() {
             <div className="lp-team-card pink">
               <div className="lp-team-photo">
                 <img
-                  src="https://media.licdn.com/dms/image/v2/D4D03AQH0YVGwtA99EQ/profile-displayphoto-crop_800_800/B4DZrJXRzEJ4AI-/0/1764314915321?e=1774483200&v=beta&t=DKCEtMyohjeSLAMGnGGOGoHzsCrVbyBrMpol56gCSHM"
+                  src="https://res.cloudinary.com/dfeuvxtao/image/upload/v1767626734/media/team/WhatsApp_Image_2026-01-05_at_8.54.51_PM_smimmr.jpg"
                   alt="Amrita Singh"
                 />
               </div>
@@ -284,7 +284,7 @@ export default function LandingPage() {
             <div className="lp-team-card cyan">
               <div className="lp-team-photo">
                 <img
-                  src="https://media.licdn.com/dms/image/v2/D4D03AQHXgSEqHtb_fw/profile-displayphoto-crop_800_800/B4DZrKqpNCHwAI-/0/1764336768583?e=1774483200&v=beta&t=FuRIz8aAb7l0on2Z-7aCVukM9X0M9l_wKUSsx4ZEp50"
+                  src="https://res.cloudinary.com/dfeuvxtao/image/upload/v1767622197/media/team/Screenshot_2026-01-05_at_7.39.24PM_slij9v.png"
                   alt="Akshat Gupta"
                 />
               </div>
